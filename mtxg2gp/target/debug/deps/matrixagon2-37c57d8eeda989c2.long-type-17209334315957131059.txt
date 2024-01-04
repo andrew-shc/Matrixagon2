@@ -1,0 +1,1 @@
+ChunkMesh<BlockGen, {closure@C:\Users\andrewshen\Documents\matrixagon2\src\component\terrain.rs:87:13: 87:50}, {closure@C:\Users\andrewshen\Documents\matrixagon2\src\component\terrain.rs:112:13: 112:46}>
