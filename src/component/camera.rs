@@ -6,17 +6,27 @@ use crate::handler::VulkanInstance;
 use crate::util::{Mat4, matrix_prod};
 use crate::world::{WorldEvent, WorldState};
 use std::{ffi, mem};
-use measurements::{Angle, Length};
+use uom::{si, unit};
+use uom::num_traits::Zero;
+use uom::si::f32::{Angle, Length, Ratio};
+use crate::measurement::blox;
 use crate::util::{create_host_buffer, matrix_ident, update_buffer};
 
 
 #[derive(Copy, Clone)]
-pub(crate) struct Translation {
-    pub(crate) x: Length, pub(crate) y: Length, pub(crate) z: Length
+pub(crate) struct Length3D {
+    pub(crate) x: Length, pub(crate) y: Length, pub(crate) z: Length,
 }
-impl Default for Translation {
+
+impl Length3D {
+    pub(crate) fn new(x: Length, y: Length, z: Length) -> Self {
+        Self {x,y,z}
+    }
+}
+
+impl Default for Length3D {
     fn default() -> Self {
-        Translation {x: Length::from_meters(0.0), y: Length::from_meters(0.0), z: Length::from_meters(0.0)}
+        Length3D {x: Length::new::<blox>(0.0), y: Length::new::<blox>(0.0), z: Length::new::<blox>(0.0)}
     }
 }
 
@@ -26,7 +36,11 @@ pub(crate) struct Rotation {
 }
 impl Default for Rotation {
     fn default() -> Self {
-        Rotation {x: Angle::from_radians(0.0), y: Angle::from_radians(0.0), z: Angle::from_radians(0.0)}
+        Rotation {
+            x: Angle::new::<si::angle::degree>(0.0),
+            y: Angle::new::<si::angle::degree>(0.0),
+            z: Angle::new::<si::angle::degree>(0.0)
+        }
     }
 }
 
@@ -34,10 +48,10 @@ pub(crate) struct CameraComponent {
     descriptor: CameraDescriptor,
 
     // high-level parameters
-    trans_speed: f64,
-    rot_speed: f64,
+    trans_speed: f32,
+    rot_speed: f32,
     // camera state
-    t: Translation,  // translations are in blocks
+    t: Length3D,  // translations are in blocks
     r: Rotation,
     translations: Vec<VirtualKeyCode>,
     rotated: bool,
@@ -55,45 +69,48 @@ pub(crate) struct CameraComponent {
 
 impl CameraComponent {
     pub(crate) fn new(vi: Rc<VulkanInstance>, device: Rc<Device>,
-                      aspect_ratio: f32, fov: f32, trans_speed: f64, rot_speed: f64) -> CameraComponent {
+                      aspect_ratio: f32, fov: f32, trans_speed: f32, rot_speed: f32) -> CameraComponent {
         let init_rot = (180.0f32).to_radians();
         CameraComponent {
             descriptor: unsafe { CameraDescriptor::new(vi.clone(), device.clone()) },
-            trans_speed, rot_speed, t: Translation::default(), r: Rotation::default(),
+            trans_speed, rot_speed, t: Length3D::default(), r: Rotation::default(),
             translations: Vec::new(), rotated: false,
             rot_x: Self::rot_x_mat(0.0),
             rot_y: Self::rot_y_mat(0.0),
             rot_z: Self::rot_z_mat(0.0),
-            trans: Self::trans_mat(Translation::default()),
+            trans: Self::trans_mat(Length3D::default()),
             far: 100000.0, near: 0.1, aspect_ratio, fov: fov.to_radians(),
         }
     }
 
-    pub(crate) fn rotate(&mut self, dr: Rotation) {
-        if dr.x.as_radians() != 0.0 {
-            self.r.x = self.r.x+dr.x*self.rot_speed;
-            self.rot_x = Self::rot_x_mat(self.r.x.as_radians() as f32);
+    pub(crate) fn rotate(&mut self, mut dr: Rotation) {
+        if dr.x.get::<si::angle::radian>() != 0.0 {
+            dr.x.value *= self.rot_speed;
+            self.r.x = self.r.x+dr.x;
+            self.rot_x = Self::rot_x_mat(self.r.x.get::<si::angle::radian>());
         }
-        if dr.y.as_radians() != 0.0 {
-            self.r.y = self.r.y+dr.y*self.rot_speed;
-            self.rot_y = Self::rot_y_mat(self.r.y.as_radians() as f32);
+        if dr.y.get::<si::angle::radian>() != 0.0 {
+            dr.y.value *= self.rot_speed;
+            self.r.y = self.r.y+dr.y;
+            self.rot_y = Self::rot_y_mat(self.r.y.get::<si::angle::radian>());
         }
-        if dr.z.as_radians() != 0.0 {
-            self.r.z = self.r.z+dr.z*self.rot_speed;
-            self.rot_z = Self::rot_z_mat(self.r.z.as_radians() as f32);
+        if dr.z.get::<si::angle::radian>() != 0.0 {
+            dr.z.value *= self.rot_speed;
+            self.r.z = self.r.z+dr.z;
+            self.rot_z = Self::rot_z_mat(self.r.z.get::<si::angle::radian>());
         }
     }
 
     pub(crate) fn move_forward(&mut self, deg: Angle) {
         // by default, 0 degrees means right
-        let angle = deg+Angle::from_degrees(90.0);
-        self.t.x = self.t.x+Length::from_meters(self.trans_speed*(angle+self.r.y).as_radians().cos());
-        self.t.z = self.t.z+Length::from_meters(self.trans_speed*(angle+self.r.y).as_radians().sin());
+        let angle = deg+Angle::new::<si::angle::degree>(90.0);
+        self.t.x = self.t.x+Length::new::<blox>((self.trans_speed*(angle+self.r.y).cos()).get::<si::ratio::ratio>());
+        self.t.z = self.t.z+Length::new::<blox>((self.trans_speed*(angle+self.r.y).sin()).get::<si::ratio::ratio>());
         self.trans = Self::trans_mat(self.t);
     }
 
     pub(crate) fn move_vertical(&mut self, multiplier: i64) {
-        self.t.y = self.t.y+Length::from_meters(multiplier as f64*self.trans_speed);
+        self.t.y = self.t.y+Length::new::<blox>(multiplier as f32*self.trans_speed);
         self.trans = Self::trans_mat(self.t);
     }
 
@@ -116,12 +133,12 @@ impl CameraComponent {
         matrix_prod(matrix_prod(matrix_prod(trans, rot_z), rot_y), rot_x)
     }
 
-    fn trans_mat(t: Translation) -> Mat4 {
+    fn trans_mat(t: Length3D) -> Mat4 {
         [
             [ 1.0, 0.0, 0.0, 0.0],
             [ 0.0, 1.0, 0.0, 0.0],
             [ 0.0, 0.0, 1.0, 0.0],
-            [-t.x.as_meters() as f32,-t.y.as_meters() as f32,-t.z.as_meters() as f32, 1.0],
+            [-t.x.get::<blox>(),-t.y.get::<blox>(),-t.z.get::<blox>(), 1.0],
         ]
     }
 
@@ -163,7 +180,9 @@ impl Component for CameraComponent {
         match event {
             WorldEvent::MouseMotion((x, y)) => {
                 self.rotate(Rotation {
-                    x: Angle::from_degrees(y), y: Angle::from_degrees(x), z: Angle::from_degrees(0.0)
+                    x: Angle::new::<si::angle::degree>(y as f32),
+                    y: Angle::new::<si::angle::degree>(x as f32),
+                    z: Angle::new::<si::angle::degree>(0.0)
                 });
                 self.rotated = true;
             }
@@ -196,16 +215,16 @@ impl Component for CameraComponent {
             for key in self.translations.clone() {
                 match key {
                     VirtualKeyCode::W => {
-                        self.move_forward(Angle::from_degrees(180.0));
+                        self.move_forward(Angle::new::<si::angle::degree>(180.0));
                     }
                     VirtualKeyCode::A => {
-                        self.move_forward(Angle::from_degrees(90.0));
+                        self.move_forward(Angle::new::<si::angle::degree>(90.0));
                     }
                     VirtualKeyCode::S => {
-                        self.move_forward(Angle::from_degrees(0.0));
+                        self.move_forward(Angle::new::<si::angle::degree>(0.0));
                     }
                     VirtualKeyCode::D => {
-                        self.move_forward(Angle::from_degrees(270.0));
+                        self.move_forward(Angle::new::<si::angle::degree>(270.0));
                     }
                     VirtualKeyCode::LShift => {
                         self.move_vertical(-1);
