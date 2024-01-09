@@ -20,20 +20,21 @@
 extern crate uom;
 
 use ash::vk;
-use uom::si;
-use uom::si::f32::{Angle, Ratio};
-use winit::dpi::PhysicalPosition;
+use egui::RawInput;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window, WindowBuilder};
 use crate::component::camera::CameraComponent;
+use crate::component::debug_ui::DebugUI;
 use crate::debug::DebugVisibility;
 use crate::handler::VulkanHandler;
-use crate::shader::cube::CubeRasterizer;
 use crate::world::{World, WorldEvent};
 use crate::component::terrain::Terrain;
 use crate::component::texture::TextureHandler;
 use crate::shader::chunk::ChunkRasterizer;
+use crate::shader::Shader;
+use crate::swapchain::{best_surface_color_and_depth_format, SwapchainManager};
 
 mod handler;
 pub mod debug;
@@ -42,8 +43,9 @@ mod world;
 mod component;
 mod util;
 mod chunk_mesh;
-mod ui_mesh;
 mod measurement;
+mod swapchain;
+mod framebuffer;
 
 
 pub struct MatrixagonApp {
@@ -60,7 +62,7 @@ pub struct MatrixagonApp {
 }
 
 impl MatrixagonApp {
-    pub fn init(validate: bool, debug_visibility: DebugVisibility, mouse_lock: bool) -> MatrixagonApp {
+    pub fn init(validate: bool, debug_visibility: DebugVisibility, fullscreen: bool, mouse_lock: bool) -> MatrixagonApp {
         /*
         - Window Management [app itself]
         - Camera [as a component]
@@ -72,24 +74,36 @@ impl MatrixagonApp {
         - VulkanHandler [created at the end to provide the render context]
          */
 
-        let initial_extent = vk::Extent2D {
-            width: 2560,
-            height: 1600,
+        let initial_extent = if fullscreen {
+            vk::Extent2D {
+                width: 2560,
+                height: 1600,
+            }
+        } else {
+            vk::Extent2D {
+                width: 1000,
+                height: 1000,
+            }
         };
 
         let event_loop = EventLoop::new();
-        let window = WindowBuilder::new()
-            // .with_inner_size(PhysicalSize::<u32>::from((initial_extent.width, initial_extent.height)))
-            .with_fullscreen(Some(Fullscreen::Borderless(None)))
+        let window = if fullscreen {
+            WindowBuilder::new().with_fullscreen(Some(Fullscreen::Borderless(None)))
+        } else {
+            WindowBuilder::new().with_inner_size(PhysicalSize::<u32>::from((initial_extent.width, initial_extent.height)))
+        }
             .with_visible(true)
             .with_title("Matrixagon 2")
             .build(&event_loop)
             .expect("Window builder failed");
+
         window.set_cursor_position(PhysicalPosition::new(
             initial_extent.width as f32/2.0, initial_extent.height as f32/2.0
         )).unwrap();
 
         let mut handler = VulkanHandler::init(&event_loop, &window, validate, debug_visibility);
+
+        // let mut ui_handler = EguiHandler::new(handler.vi.clone(), handler.device.clone());
 
         let ratio = initial_extent.width as f32/initial_extent.height as f32;
         let mut world = World::new(debug_visibility, vec![
@@ -98,9 +112,10 @@ impl MatrixagonApp {
             )),
             Box::new(Terrain::new(handler.vi.clone(), handler.device.clone())),
             Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone())),
+            // Box::new(DebugUI::new(handler.vi.clone(), handler.device.clone(), RawInput::default())),
         ]);
 
-        let format = handler.best_surface_color_and_depth_format();
+        let format = best_surface_color_and_depth_format(debug_visibility, handler.vi.clone());
         let descriptors = unsafe {
             world.load_descriptors(handler.cmd_pool, handler.gfxs_queue)
         };
@@ -109,8 +124,11 @@ impl MatrixagonApp {
             ChunkRasterizer::new(handler.device.clone(), initial_extent, format.0, format.1, descriptors)
         };
 
+        handler.load_swapchain(unsafe {
+            SwapchainManager::new(debug_visibility, handler.vi.clone(), handler.device.clone(), shader.renderpass(), shader.attachments())
+        });
         handler.load_shader(shader);
-        handler.create_swapchain(initial_extent);
+        // handler.create_swapchain(initial_extent);
 
         MatrixagonApp {
             debug_visibility,
@@ -120,6 +138,7 @@ impl MatrixagonApp {
             mouse_lock,
             world,
             handler,
+            // ui_handler,
         }
     }
 
@@ -152,6 +171,8 @@ impl MatrixagonApp {
                 // final event (for drawing and benchmarking)
                 if app.window_render {
                     app.world.render(app.handler.obtain_shader_mut_ref());
+
+                    // app.ui_handler.handle_output();
 
                     app.handler.draw_frame();
                 }

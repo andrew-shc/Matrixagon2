@@ -5,6 +5,28 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/test_uom/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/ahash-47b990802fd96b56/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/ash-4ed623b90ab5b10e/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/ash-94742134b672c928/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/ash-e84cdeafdee49a98/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/ash-eef8422bd4dcd75e/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/crc32fast-12b91d68d1ba851c/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/crc32fast-83f05dab09f411ac/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/libm-04d2afcfc8377019/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/libm-a3fa00adcfb21661/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/parking_lot_core-b84e3a355b69f1d2/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/winapi-63e770d92ad6ff08/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/winapi-753a7d6d56085ced/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/winapi-e3ab646205285356/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/windows_x86_64_msvc-1657ffce16d3ea03/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/windows_x86_64_msvc-a3363088cb58e7a6/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/windows_x86_64_msvc-c56c5f3700c04b2b/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/windows_x86_64_msvc-fb4a82a132ec77da/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/winit-4a2fa050fac232d7/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/winit-4e7b5308129afef3/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/winit-59d2d9bc17b529a7/out" />
+      <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/examples" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

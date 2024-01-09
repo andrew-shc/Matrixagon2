@@ -266,7 +266,7 @@ impl Component for CameraComponent {
 
 // TODO: UNIFORM OBJECTS HAVE TO BE ALIGNED
 #[derive(Copy, Clone)]
-pub(crate) struct CameraUBO {
+struct CameraUBO {
     pub(crate) view: [[f32;4];4],
     pub(crate) proj: [[f32;4];4],
 }
@@ -279,7 +279,7 @@ impl Default for CameraUBO {
 
 
 // CAMERA DESCRIPTOR
-pub(crate) struct CameraDescriptor {
+ struct CameraDescriptor {
     device: Rc<Device>,
     // descriptor fields of uniform buffer
     ubo_buf: vk::Buffer,
@@ -289,7 +289,7 @@ pub(crate) struct CameraDescriptor {
 }
 
 impl CameraDescriptor {
-    pub(crate) unsafe fn new(vi: Rc<VulkanInstance>, device: Rc<Device>) -> CameraDescriptor {
+     unsafe fn new(vi: Rc<VulkanInstance>, device: Rc<Device>) -> CameraDescriptor {
         let (ubo_buf, ubo_mem, ubo_ptr, ubo_size) =
             create_host_buffer(vi.clone(), device.clone(), &[CameraUBO::default()], vk::BufferUsageFlags::UNIFORM_BUFFER, false);
 
@@ -298,13 +298,13 @@ impl CameraDescriptor {
         }
     }
 
-    pub(crate) fn update(&mut self, ubo: CameraUBO) {
+    fn update(&mut self, ubo: CameraUBO) {
         unsafe {
             update_buffer(self.ubo_ptr, &[ubo], self.ubo_size);
         }
     }
 
-    pub(crate) fn descriptor_buffer_info(&self) -> vk::DescriptorBufferInfo {
+    fn descriptor_buffer_info(&self) -> vk::DescriptorBufferInfo {
         vk::DescriptorBufferInfo {
             buffer: self.ubo_buf,
             offset: 0 as vk::DeviceSize,
@@ -312,7 +312,7 @@ impl CameraDescriptor {
         }
     }
 
-    pub(crate) unsafe fn destroy(&self) {
+    unsafe fn destroy(&self) {
         self.device.destroy_buffer(self.ubo_buf, None);
         self.device.free_memory(self.ubo_mem, None);
     }

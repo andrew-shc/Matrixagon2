@@ -2,8 +2,9 @@ use std::mem;
 use std::rc::Rc;
 use ash::{Device, vk};
 use crate::component::{RenderData, RenderDataPurpose};
-use crate::offset_of;
-use crate::shader::{destroy_shader_modules, gen_shader_modules_info, Shader};
+use crate::framebuffer::AttachmentRef;
+use crate::{get_vertex_inp, offset_of};
+use crate::shader::{DescriptorManager, destroy_shader_modules, gen_shader_modules_info, get_vertex_inp, Shader};
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct ChunkVertex {
@@ -11,83 +12,31 @@ pub(crate) struct ChunkVertex {
     pub(crate) uv: [f32; 2],
 }
 
-impl ChunkVertex {
-    fn get_binding_description() -> vk::VertexInputBindingDescription {
-        vk::VertexInputBindingDescription {
-            binding: 0,
-            stride: mem::size_of::<ChunkVertex>() as u32,
-            input_rate: vk::VertexInputRate::VERTEX,
-            ..Default::default()
-        }
-    }
-
-    fn get_attribute_description() -> Vec<vk::VertexInputAttributeDescription> {
-        vec![
-            vk::VertexInputAttributeDescription {
-                binding: 0,
-                location: 0,
-                format: vk::Format::R32G32B32_SFLOAT,
-                offset: offset_of!(ChunkVertex, pos) as u32,
-            },
-            vk::VertexInputAttributeDescription {
-                binding: 0,
-                location: 1,
-                format: vk::Format::R32G32_SFLOAT,
-                offset: offset_of!(ChunkVertex, uv) as u32,
-            },
-        ]
-    }
-}
-
 
 pub struct ChunkRasterizer {
     device: Rc<Device>,
     extent: vk::Extent2D,
-    pipeline_layout: vk::PipelineLayout,
     renderpass: vk::RenderPass,
     gfxs_pipeline: vk::Pipeline,
 
     terrain_vbo: Option<(vk::Buffer, vk::DeviceMemory)>,
     terrain_ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
 
-    descriptor_set_layout: vk::DescriptorSetLayout,
-    descriptor_pool: vk::DescriptorPool,
-    descriptor_set: Vec<vk::DescriptorSet>,
-
+    descriptor: DescriptorManager,
 }
 
 impl ChunkRasterizer {
     pub(crate) unsafe fn new(device: Rc<Device>, extent: vk::Extent2D, color_format: vk::Format,
                              depth_format: vk::Format, descriptor_buffers: Vec<RenderData>,) -> Self {
-        // DESCRIPTION SET LAYOUT
-        let camera_view_proj_layout_binding = vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_count: 1,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-            p_immutable_samplers: std::ptr::null(),
-            stage_flags: vk::ShaderStageFlags::VERTEX,
-        };
-        let texture_layout_binding = vk::DescriptorSetLayoutBinding {
-            binding: 1,
-            descriptor_count: 1,
-            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            p_immutable_samplers: std::ptr::null(),
-            stage_flags: vk::ShaderStageFlags::FRAGMENT,
-        };
-
-        // PIPELINE LAYOUT
-        let descriptor_set_layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
-            .bindings(&[camera_view_proj_layout_binding, texture_layout_binding])
-            .build();
-        let descriptor_set_layout = device.create_descriptor_set_layout(&descriptor_set_layout_info, None)
-            .expect("Failed to create descriptor set layout");
-
-        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(&[descriptor_set_layout])
-            .build();
-        let pipeline_layout = device.create_pipeline_layout(&pipeline_layout_info, None).unwrap();
-
-        // RENDER PASSES
+        let mut descriptor = DescriptorManager::new(device.clone(), vec![
+            vec![  // set 0 for shader
+                (vk::DescriptorType::UNIFORM_BUFFER, vk::ShaderStageFlags::VERTEX),  // proj-view
+                (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT),  // textures
+            ],
+            // vec![  // TODO: set 1 for ui
+            //     (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT),
+            // ],
+        ]);
 
         // GRAPHICS PIPELINE
 
@@ -97,14 +46,10 @@ impl ChunkRasterizer {
                 ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.frag", vk::ShaderStageFlags::FRAGMENT),
             ]);
 
-        let binding_descrp = ChunkVertex::get_binding_description();
-        let attr_descrp = ChunkVertex::get_attribute_description();
-
-
-        let vertex_inp_info = vk::PipelineVertexInputStateCreateInfo::builder()
-            .vertex_binding_descriptions(&[binding_descrp])
-            .vertex_attribute_descriptions(&attr_descrp)
-            .build();
+        let vertex_inp_info = get_vertex_inp!(ChunkVertex;
+            (vk::Format::R32G32B32_SFLOAT, pos),
+            (vk::Format::R32G32_SFLOAT, uv)
+        );
 
         let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
         let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::builder()
@@ -248,7 +193,7 @@ impl ChunkRasterizer {
             p_color_blend_state: &color_blend_info,
             p_dynamic_state: &dynamic_state_info,
 
-            layout: pipeline_layout,
+            layout: descriptor.pipeline_layout,
             render_pass: renderpass,
             subpass: 0,
             ..Default::default()
@@ -256,59 +201,13 @@ impl ChunkRasterizer {
 
         let gfxs_pipeline = device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None).unwrap();
 
-        // DESCRIPTOR ALLOCATION
-
-        let camera_view_proj_descriptor_pool_size = vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 1,
-        };
-        let texture_descriptor_pool_size = vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: 1,
-        };
-
-        let descriptor_pool_info = vk::DescriptorPoolCreateInfo::builder()
-            .pool_sizes(&[camera_view_proj_descriptor_pool_size, texture_descriptor_pool_size])
-            .max_sets(1)
-            .build();
-
-        let descriptor_pool = device.create_descriptor_pool(&descriptor_pool_info, None)
-            .expect("Failed to create descriptor pool");
-
-        let descriptor_set_alloc = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(descriptor_pool)
-            .set_layouts(&[descriptor_set_layout])
-            .build();
-
-        let descriptor_set = device.allocate_descriptor_sets(&descriptor_set_alloc)
-            .expect("Failed to allocate descriptor sets");
-
-
-        println!("DESCRIPTORS {descriptor_buffers:?}");
-
         for render_data in descriptor_buffers {
             match render_data {
                 RenderData::InitialDescriptorBuffer(buf, RenderDataPurpose::CameraViewProjection) => {
-                    device.update_descriptor_sets(&[
-                        vk::WriteDescriptorSet::builder()
-                            .dst_set(descriptor_set[0])
-                            .dst_binding(0)
-                            .dst_array_element(0)
-                            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                            .buffer_info(&buf.clone())
-                            .build()
-                    ], &[]);
+                    descriptor.write_buffer(0, 0, buf);
                 },
                 RenderData::InitialDescriptorImage(img, RenderDataPurpose::BlockTextures) => {
-                    device.update_descriptor_sets(&[
-                        vk::WriteDescriptorSet::builder()
-                            .dst_set(descriptor_set[0])
-                            .dst_binding(1)
-                            .dst_array_element(0)
-                            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                            .image_info(&img.clone())
-                            .build()
-                    ], &[]);
+                    descriptor.write_image(0, 1, img);
                 },
                 _ => {},
             }
@@ -320,15 +219,10 @@ impl ChunkRasterizer {
             device: device.clone(),
             extent,
             renderpass,
-            pipeline_layout,
             gfxs_pipeline: gfxs_pipeline[0],
-
             terrain_vbo: None,
             terrain_ibo: None,
-
-            descriptor_set_layout,
-            descriptor_pool,
-            descriptor_set,
+            descriptor,
         }
     }
 }
@@ -338,6 +232,14 @@ impl Shader for ChunkRasterizer {
         self.renderpass
     }
 
+    fn attachments(&self) -> Vec<AttachmentRef> {
+        vec![
+            AttachmentRef::Presentation,  // final composition
+            AttachmentRef::Depth,  // depth & color for the main rendering blocks
+            AttachmentRef::Color,
+        ]
+    }
+
     fn update_extent(&mut self, new_extent: vk::Extent2D) {
         self.extent = new_extent;
     }
@@ -345,7 +247,7 @@ impl Shader for ChunkRasterizer {
     fn recreate_buffer(&mut self, render_data: RenderData) {
         match render_data {
             RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainVertices) => unsafe {
-                println!("RECREATE VBO");
+                println!("RECREATE VBO: {:?}", buf);
                 if let Some((old_buf, old_mem)) = self.terrain_vbo {
                     println!("DEL OLD VBO");
                     self.device.device_wait_idle().unwrap();
@@ -355,7 +257,7 @@ impl Shader for ChunkRasterizer {
                 self.terrain_vbo = Some((buf, mem));
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainVertices) => unsafe {
-                println!("RECREATE IBO");
+                println!("RECREATE IBO: {:?}", len);
                 if let Some((old_buf, old_mem, _)) = self.terrain_ibo {
                     println!("DEL OLD IBO");
                     self.device.device_wait_idle().unwrap();
@@ -407,7 +309,8 @@ impl Shader for ChunkRasterizer {
         };
         self.device.cmd_set_scissor(cmd_buf, 0, &[scissor]);
 
-        self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.pipeline_layout, 0, &self.descriptor_set, &[]);
+        self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.descriptor.pipeline_layout(),
+                                             0, &self.descriptor.descriptor_sets(&[0]), &[]);
 
         self.device.cmd_draw_indexed(cmd_buf, self.terrain_ibo.unwrap().2, 1, 0, 0, 0);
         // self.device.cmd_draw(cmd_buf, self.vertices.len() as u32, 1, 0, 0);
@@ -416,9 +319,6 @@ impl Shader for ChunkRasterizer {
     }
 
     unsafe fn destroy(&self) {
-        self.device.destroy_descriptor_pool(self.descriptor_pool, None);
-        self.device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
-
         if let Some((old_buf, old_mem)) = self.terrain_vbo {
             self.device.destroy_buffer(old_buf, None);
             self.device.free_memory(old_mem, None);
@@ -429,7 +329,7 @@ impl Shader for ChunkRasterizer {
         }
 
         self.device.destroy_pipeline(self.gfxs_pipeline, None);
-        self.device.destroy_pipeline_layout(self.pipeline_layout, None);
+        self.descriptor.destroy();
         self.device.destroy_render_pass(self.renderpass, None);
     }
 }

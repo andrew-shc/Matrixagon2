@@ -13,6 +13,7 @@ layout(location = 1) out vec2 tex_coord;
 
 void main() {
     gl_Position = ubo.proj * ubo.view * vec4(position, 1.0);
+//    gl_Position = vec4(position, 1.0);
     tex_coord = uv;
 //    DEBUG_pos = position;
 }

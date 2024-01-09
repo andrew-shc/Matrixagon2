@@ -8,7 +8,6 @@ use crate::component::camera::Length3D;
 use crate::handler::VulkanInstance;
 use crate::measurement::{blox, chux};
 use crate::shader::chunk::ChunkVertex;
-use crate::shader::cube::ExCubeVertex;
 use crate::util::create_host_buffer;
 use crate::world::{WorldEvent, WorldState};
 

@@ -1,6 +1,7 @@
 pub mod camera;
 pub mod terrain;
 pub mod texture;
+pub mod debug_ui;
 
 use ash::vk;
 use crate::world::{WorldEvent, WorldState};
@@ -12,6 +13,7 @@ pub enum RenderDataPurpose {
     CameraViewProjection,
     BlockTextures,
     TerrainVertices,
+    DebugUI,
 }
 
 // TODO: initial render data & update render data
@@ -27,6 +29,7 @@ pub enum RenderData {
     InitialDescriptorImage(Vec<vk::DescriptorImageInfo>, RenderDataPurpose),
     RecreateVertexBuffer(vk::Buffer, vk::DeviceMemory, RenderDataPurpose),
     RecreateIndexBuffer(vk::Buffer, vk::DeviceMemory, u32, RenderDataPurpose),
+    SetScissorDynamicState(vk::Rect2D, RenderDataPurpose),
 }
 
 // using a single master trait for components, since splitting the trait into related methods

@@ -11,6 +11,7 @@ use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::window::Window;
 use crate::debug::DebugVisibility;
 use crate::shader::Shader;
+use crate::swapchain::{query_swapchain_support, SwapchainManager};
 use crate::util::create_local_depth_image;
 
 
@@ -21,22 +22,6 @@ const VALIDATION_LYRS: &[*const c_char] = &[
     unsafe {CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_KHRONOS_validation\0").as_ptr()},
     // unsafe {CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_LUNARG_api_dump\0").as_ptr()},
 ];
-
-
-pub(crate) struct SwapchainMTXG {
-    loader: Swapchain,
-    obj: vk::SwapchainKHR,
-    depth_image: vk::Image,
-    depth_image_mem: vk::DeviceMemory,
-    images: Vec<vk::Image>,
-    pub(crate) extent: vk::Extent2D,
-    capabilities: vk::SurfaceCapabilitiesKHR,
-    pub(crate) format: vk::SurfaceFormatKHR,
-    prsnt_mode: vk::PresentModeKHR,
-    image_views: Vec<vk::ImageView>,
-    depth_view: vk::ImageView,
-    framebuffers: Vec<vk::Framebuffer>,
-}
 
 struct SyncMTXG {
     image_available_smph: vk::Semaphore,
@@ -54,7 +39,7 @@ pub struct VulkanHandler {
     pub(crate) device: Rc<Device>,
     pub(crate) gfxs_queue: vk::Queue,
     pub(crate) prsnt_queue: vk::Queue,
-    pub(crate) swapchain: Option<SwapchainMTXG>,
+    pub(crate) swapchain: Option<SwapchainManager>,
     pub(crate) cmd_pool: vk::CommandPool,
 
     render_cmd_buf: vk::CommandBuffer,
@@ -243,55 +228,36 @@ impl VulkanHandler {
         }
     }
 
-    pub(crate) fn best_surface_color_and_depth_format(&self) -> (vk::Format, vk::Format) {
-        unsafe {
-            let (_, fmt, prsnt) = query_swapchain_support(self.debug_output, &self.vi);
-            let (fmt, _) = select_swapchain_support(fmt, prsnt);
-            (fmt.format, best_depth_format_support())
-        }
-    }
-
     pub(crate) fn load_shader(&mut self, shader: impl Shader + 'static) {
-        self.shader = Some(Box::new(shader) as Box<dyn Shader>);
+        // self.shader = Some(Box::new(shader) as Box<dyn Shader>);
+        self.shader.replace(Box::new(shader) as Box<dyn Shader>);
     }
 
     pub(crate) fn obtain_shader_mut_ref(&mut self) -> &mut Box<dyn Shader> {
         self.shader.as_mut().unwrap()
     }
 
-    pub(crate) fn create_swapchain(&mut self, initial_extent: vk::Extent2D) {
-        unsafe {
-            let (capb, fmt, prsnt) = query_swapchain_support(self.debug_output, &self.vi);
-            let (fmt, prsnt) = select_swapchain_support(fmt, prsnt);
-            let swapchain_loader = Swapchain::new(&self.vi.inst, &*self.device.clone());
-
-            // TODO: find a way to determine which renderpass to use
-            let renderpass = self.shader.as_ref().unwrap().renderpass();
-
-            self.swapchain = Some(
-                create_swapchain(
-                    self.debug_output, self.vi.clone(), self.device.clone(), swapchain_loader, None,
-                    renderpass, initial_extent, capb, fmt, prsnt, best_depth_format_support()
-                )
-            );
-        }
+    pub(crate) fn load_swapchain(&mut self, swapchain_manager: SwapchainManager) {
+        self.swapchain.replace(swapchain_manager);
     }
 
     pub(crate) unsafe fn draw_frame(&mut self) {
-        let swapchain = self.swapchain.as_ref()
+        let mut swapchain = self.swapchain.as_mut()
             .expect("Attempted to draw frame when swapchain has not initialized yet!");
 
         self.device.wait_for_fences(&[self.sync.in_flight_fence], true, u64::MAX).unwrap();
 
-        let acquisition = swapchain.loader.acquire_next_image(swapchain.obj, u64::MAX, self.sync.image_available_smph, vk::Fence::null());
+        let acquisition = swapchain.loader.acquire_next_image(swapchain.swapchain, u64::MAX, self.sync.image_available_smph, vk::Fence::null());
         match acquisition {
             // swapchain suboptimal
             Ok((_, true)) => {
-                self.recreate_swapchain();
+                // self.recreate_swapchain();
+                swapchain.recreate();
                 return;
             }
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                self.recreate_swapchain();
+                // self.recreate_swapchain();
+                swapchain.recreate();
                 return;
             }
             Err(e) => {
@@ -314,7 +280,7 @@ impl VulkanHandler {
             .expect("Failed to begin recording command buffers");
 
         self.shader.as_ref().unwrap()
-            .draw_command(self.render_cmd_buf, swapchain.framebuffers[img_ind as usize]);
+            .draw_command(self.render_cmd_buf, swapchain.fbm.framebuffers[img_ind as usize]);
 
         self.device.end_command_buffer(self.render_cmd_buf)
             .expect("Failed to record command buffers");
@@ -330,16 +296,18 @@ impl VulkanHandler {
 
         let prsnt_info = vk::PresentInfoKHR::builder()
             .wait_semaphores(&[self.sync.render_finished_smph])
-            .swapchains(&[swapchain.obj])
+            .swapchains(&[swapchain.swapchain])
             .image_indices(&[img_ind]).build();
         let swapchain_result = swapchain.loader.queue_present(self.prsnt_queue, &prsnt_info);
         match swapchain_result {
             // swapchain suboptimal
             Ok(true) => {
-                self.recreate_swapchain();
+                // self.recreate_swapchain();
+                swapchain.recreate();
             }
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                self.recreate_swapchain();
+                // self.recreate_swapchain();
+                swapchain.recreate();
             }
             Err(e) => {
                 panic!("{}", e);
@@ -348,28 +316,10 @@ impl VulkanHandler {
         }
     }
 
-    pub(crate) unsafe fn recreate_swapchain(&mut self) {
-        let (capb, fmt, prsnt) = query_swapchain_support(self.debug_output, &self.vi);
-        let (fmt, prsnt) = select_swapchain_support(fmt, prsnt);
-        let old_swapchain = self.swapchain.as_ref().expect("Expected swapchain when recreating");
-        // TODO: find a way to determine renderpass from multiple shaders
-        let new_swapchain = create_swapchain(
-            self.debug_output, self.vi.clone(), self.device.clone(),
-            old_swapchain.loader.clone(),
-            Some(old_swapchain.obj), self.shader.as_ref().unwrap().renderpass(), capb.current_extent,
-            capb, fmt, prsnt, best_depth_format_support()
-        );
-        self.shader.as_mut().unwrap()
-            .update_extent(capb.current_extent);
-
-        self.device.device_wait_idle().unwrap();
-        self.destroy_swapchain();
-        self.swapchain = Some(new_swapchain);
-
-    }
-
     pub(crate) unsafe fn destroy(&self) {
-        self.destroy_swapchain();
+        if let Some(swapchain) = &self.swapchain {
+            swapchain.destroy();
+        }
 
         self.device.destroy_semaphore(self.sync.image_available_smph, None);
         self.device.destroy_semaphore(self.sync.render_finished_smph, None);
@@ -389,24 +339,6 @@ impl VulkanHandler {
         }
         self.vi.surf_loader.destroy_surface(self.vi.surf, None);
         self.vi.inst.destroy_instance(None);
-    }
-
-    pub(crate) unsafe fn destroy_swapchain(&self) {
-        if let Some(swapchain) = &self.swapchain {
-            self.device.destroy_image_view(swapchain.depth_view, None);
-            self.device.destroy_image(swapchain.depth_image, None);
-            self.device.free_memory(swapchain.depth_image_mem, None);
-
-            for &framebuffer in swapchain.framebuffers.iter() {
-                self.device.destroy_framebuffer(framebuffer, None);
-            }
-
-            for &view in swapchain.image_views.iter() {
-                self.device.destroy_image_view(view, None);
-            }
-
-            swapchain.loader.destroy_swapchain(swapchain.obj, None);
-        }
     }
 }
 
@@ -429,177 +361,6 @@ unsafe fn find_queue_families(dbgv: DebugVisibility, vi: &VulkanInstance) -> Opt
     }
 
     None
-}
-
-unsafe fn query_swapchain_support(dbgv: DebugVisibility, vi: &VulkanInstance)
-    -> (vk::SurfaceCapabilitiesKHR, Vec<vk::SurfaceFormatKHR>, Vec<vk::PresentModeKHR>) {
-    let capabilities = vi.get_physical_device_surface_capabilities();
-    let formats = vi.get_physical_device_surface_formats();
-    let present_modes = vi.get_physical_device_surface_present_modes();
-    if dbgv.vk_swapchain_output {
-        println!("Supported Surface capabilities: {:?}", capabilities);
-        println!("Supported Surface formats: {:?}", formats);
-        println!("Supported Surface presentation modes: {:?}", present_modes);
-    }
-
-    (capabilities, formats, present_modes)
-}
-
-unsafe fn select_swapchain_support(surf_fmt: Vec<vk::SurfaceFormatKHR>, prsnt_mode: Vec<vk::PresentModeKHR>)
-    -> (vk::SurfaceFormatKHR, vk::PresentModeKHR) {
-    // generally, you want to choose the best format, presentation mode, and extent
-    // but we'll just assume :)
-
-    let format = vk::SurfaceFormatKHR {
-        format: vk::Format::B8G8R8A8_SRGB,
-        color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
-    };
-    let prsnt_mode = vk::PresentModeKHR::MAILBOX;
-
-    (format, prsnt_mode)
-}
-
-unsafe fn best_depth_format_support() -> vk::Format {
-    // TODO
-
-    vk::Format::D32_SFLOAT
-}
-
-
-// unsafe fn choose_swap_surf_format() {
-//
-// }
-//
-// unsafe fn choose_swap_prsnt_mode() {
-//
-// }
-//
-// unsafe fn choose_swap_extent() {
-//
-// }
-
-unsafe fn create_swapchain(
-    dbv: DebugVisibility, vi: Rc<VulkanInstance>, device: Rc<Device>, swapchain_loader: Swapchain,
-    old_swapchain: Option<vk::SwapchainKHR>, renderpass: vk::RenderPass, swap_extent: vk::Extent2D,
-    surf_capabilities: vk::SurfaceCapabilitiesKHR, surf_format: vk::SurfaceFormatKHR, prsnt_mode: vk::PresentModeKHR,
-    depth_format: vk::Format,
-) -> SwapchainMTXG {
-    // create swapchain itself and related objects (imageview and framebuffer)
-
-    // SWAPCHAIN
-    let image_count = surf_capabilities.min_image_count+1;
-
-    // assuming graphics and presentation queue families are the same ind.
-    let swapchain_create_info = vk::SwapchainCreateInfoKHR {
-        surface: vi.surf,
-        min_image_count: image_count,
-        image_format: surf_format.format,
-        image_color_space: surf_format.color_space,
-        image_extent: swap_extent,
-        image_array_layers: 1,
-        image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
-        image_sharing_mode: vk::SharingMode::EXCLUSIVE,
-        pre_transform: surf_capabilities.current_transform,
-        composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
-        present_mode: prsnt_mode,
-        clipped: vk::TRUE,
-        old_swapchain: if let Some(old_swapchain) = old_swapchain {old_swapchain} else {vk::SwapchainKHR::null()},
-        ..Default::default()
-    };
-
-    let swapchain = swapchain_loader.create_swapchain(&swapchain_create_info, None)
-        .expect("Failed to create swapchain");
-
-    if dbv.vk_swapchain_output {
-        println!("Swapchain Object: {:?}", swapchain);
-    }
-
-    let swapchain_images = swapchain_loader.get_swapchain_images(swapchain)
-        .expect("Failed to get swapchain images");
-
-    let mut image_views = Vec::new();
-    for swapchain_image in &swapchain_images {
-        let scv_create_info = vk::ImageViewCreateInfo {
-            image: *swapchain_image,
-            view_type: vk::ImageViewType::TYPE_2D,
-            format: surf_format.format,
-            components: vk::ComponentMapping {
-                r: vk::ComponentSwizzle::IDENTITY,
-                g: vk::ComponentSwizzle::IDENTITY,
-                b: vk::ComponentSwizzle::IDENTITY,
-                a: vk::ComponentSwizzle::IDENTITY,
-            },
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            },
-            ..Default::default()
-        };
-
-        let view = device.create_image_view(&scv_create_info, None)
-            .expect("Failed to create image view");
-        image_views.push(view);
-    }
-
-    let (depth_img, depth_img_mem) = create_local_depth_image(
-        vi.clone(), device.clone(), vk::Extent3D {width: swap_extent.width, height: swap_extent.height, depth: 1}, depth_format
-    );
-    let depth_imgv_create_info = vk::ImageViewCreateInfo {
-        image: depth_img,
-        view_type: vk::ImageViewType::TYPE_2D,
-        format: depth_format,
-        components: vk::ComponentMapping {
-            r: vk::ComponentSwizzle::IDENTITY,
-            g: vk::ComponentSwizzle::IDENTITY,
-            b: vk::ComponentSwizzle::IDENTITY,
-            a: vk::ComponentSwizzle::IDENTITY,
-        },
-        subresource_range: vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::DEPTH,
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        },
-        ..Default::default()
-    };
-    let depth_view = device.create_image_view(&depth_imgv_create_info, None)
-        .expect("Failed to create image view");
-
-    // FRAMEBUFFER
-
-    let mut framebuffers = Vec::new();
-    for swapchain_view in &image_views {
-        let framebuffer_info = vk::FramebufferCreateInfo::builder()
-            .render_pass(renderpass)
-            .attachments(&[*swapchain_view, depth_view])
-            .width(swap_extent.width)
-            .height(swap_extent.height)
-            .layers(1)
-            .build();
-
-        let fb = device.create_framebuffer(&framebuffer_info, None)
-            .expect("Failed to create framebuffer");
-        framebuffers.push(fb);
-    }
-
-    SwapchainMTXG {
-        loader: swapchain_loader,
-        obj: swapchain,
-        depth_image_mem: depth_img_mem,
-        depth_image: depth_img,
-        images: swapchain_images,
-        extent: swap_extent,
-        capabilities: surf_capabilities,
-        format: surf_format,
-        prsnt_mode,
-        depth_view,
-        image_views,
-        framebuffers,
-    }
 }
 
 unsafe extern "system" fn vulkan_validation_debug_callback(
