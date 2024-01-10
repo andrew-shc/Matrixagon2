@@ -19,6 +19,8 @@ pub(crate) struct SwapchainManager {
     pub(crate) prsnt: vk::PresentModeKHR,
     pub(crate) fbm: FramebufferManager,
 
+    prsnt_inp: bool,
+
     // per renderpass
     renderpass: vk::RenderPass,
     attachments: Vec<AttachmentRef>,
@@ -70,13 +72,13 @@ impl SwapchainManager {
 
         let fbm = FramebufferManager::new_swapchain_bounded(
             dbv, vi.clone(), device.clone(), renderpass, attachments.clone(), swapchain_images,
-            fmt.format, best_depth_format_support(), capb.current_extent
+            fmt.format, best_depth_format_support(), capb.current_extent, prsnt_inp
         );
 
         Self {
             dbv, vi: vi.clone(), device: device.clone(),
             loader: swapchain_loader, swapchain, extent: capb.current_extent, capb, fmt, prsnt, fbm,
-            renderpass, attachments,
+            prsnt_inp, renderpass, attachments,
         }
     }
 
@@ -92,7 +94,11 @@ impl SwapchainManager {
             image_color_space: fmt.color_space,
             image_extent: capb.current_extent,
             image_array_layers: 1,
-            image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            image_usage: if self.prsnt_inp {
+                vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::INPUT_ATTACHMENT
+            } else {
+                vk::ImageUsageFlags::COLOR_ATTACHMENT
+            },
             image_sharing_mode: vk::SharingMode::EXCLUSIVE,
             pre_transform: capb.current_transform,
             composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
@@ -114,7 +120,7 @@ impl SwapchainManager {
 
         let fbm = FramebufferManager::new_swapchain_bounded(
             self.dbv, self.vi.clone(), self.device.clone(), self.renderpass, self.attachments.clone(), swapchain_images,
-            fmt.format, best_depth_format_support(), capb.current_extent
+            fmt.format, best_depth_format_support(), capb.current_extent, self.prsnt_inp
         );
 
         self.device.device_wait_idle().unwrap();

@@ -122,7 +122,7 @@ impl ChunkRasterizer {
         // SUBPASS & ATTACHMENTS
 
         // TODO: DEBUG UI SENSITIVE
-        let comp_attachment = vk::AttachmentDescription {
+        let prsnt_attachment = vk::AttachmentDescription {
             format: color_format,
             samples: vk::SampleCountFlags::TYPE_1,
             load_op: vk::AttachmentLoadOp::CLEAR,
@@ -134,17 +134,17 @@ impl ChunkRasterizer {
             ..Default::default()
         };
 
-        let color_attachment = vk::AttachmentDescription {
-            format: color_format,
-            samples: vk::SampleCountFlags::TYPE_1,
-            load_op: vk::AttachmentLoadOp::CLEAR,
-            store_op: vk::AttachmentStoreOp::STORE,
-            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
-            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
-            initial_layout: vk::ImageLayout::UNDEFINED,
-            final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            ..Default::default()
-        };
+        // let color_attachment = vk::AttachmentDescription {
+        //     format: color_format,
+        //     samples: vk::SampleCountFlags::TYPE_1,
+        //     load_op: vk::AttachmentLoadOp::CLEAR,
+        //     store_op: vk::AttachmentStoreOp::STORE,
+        //     stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+        //     stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+        //     initial_layout: vk::ImageLayout::UNDEFINED,
+        //     final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        //     ..Default::default()
+        // };
 
         let depth_attachment = vk::AttachmentDescription {
             format: depth_format,
@@ -158,20 +158,20 @@ impl ChunkRasterizer {
             ..Default::default()
         };
 
-        let main_color_attachment_ref = vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL };
-        let depth_attachment_ref = vk::AttachmentReference { attachment: 2, layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
-        let subpass = vk::SubpassDescription::builder()
+        let prsnt_attachment_ref = vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL };
+        let depth_attachment_ref = vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+        let block_subpass = vk::SubpassDescription::builder()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-            .color_attachments(&[main_color_attachment_ref])
+            .color_attachments(&[prsnt_attachment_ref])
             .depth_stencil_attachment(&depth_attachment_ref)
             .build();
 
-        let inp_attachment_ref = vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL };
-        let color_attachment_ref = vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL };
+        let inp_prsnt_attachment_ref = vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::GENERAL };
+        let prsnt_attachment_ref = vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::GENERAL };
         let comp_subpass = vk::SubpassDescription::builder()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-            .input_attachments(&[inp_attachment_ref])
-            .color_attachments(&[color_attachment_ref])
+            .input_attachments(&[inp_prsnt_attachment_ref])
+            .color_attachments(&[prsnt_attachment_ref])
             .build();
 
         let dependency = vk::SubpassDependency {
@@ -195,8 +195,8 @@ impl ChunkRasterizer {
         };
 
         let renderpass_info = vk::RenderPassCreateInfo::builder()
-            .attachments(&[comp_attachment, color_attachment, depth_attachment])
-            .subpasses(&[subpass, comp_subpass])
+            .attachments(&[prsnt_attachment, depth_attachment])
+            .subpasses(&[block_subpass, comp_subpass])
             .dependencies(&[dependency, comp_dependency])
             .build();
         let renderpass = device.create_render_pass(&renderpass_info, None).unwrap();
@@ -247,8 +247,6 @@ impl Shader for ChunkRasterizer {
 
     fn attachments(&self) -> Vec<AttachmentRef> {
         vec![  // TODO: DEBUG UI SENSITIVE
-            AttachmentRef::Presentation,  // final composition (for debug UI)
-            AttachmentRef::ColorInput,  // depth & color for the main rendering blocks
             AttachmentRef::Depth,
         ]
     }
@@ -264,9 +262,9 @@ impl Shader for ChunkRasterizer {
                 },
                 // TODO: DEBUG UI SENSITIVE
                 RenderData::InitialDescriptorImage(img, RenderDataPurpose::DebugUI) => {
-                    self.descriptor.write_image(1, 0, img);
+                    self.descriptor.write_image(1, 0, img);  // egui debug ui textures
                 }
-                RenderData::InitialDescriptorImage(img, RenderDataPurpose::DebugUIInpAttachment) => {
+                RenderData::InitialDescriptorImage(img, RenderDataPurpose::PresentationInpAttachment) => {
                     self.descriptor.write_image(1, 1, img);
                 }
                 _ => {},
@@ -333,7 +331,6 @@ impl Shader for ChunkRasterizer {
             .render_area(vk::Rect2D { offset: vk::Offset2D {x:0, y:0}, extent: self.extent})
             .clear_values(&[
                 // TODO: DEBUG UI SENSITIVE
-                vk::ClearValue { color: vk::ClearColorValue {float32: [1.0, 0.0, 0.0, 1.0]} },
                 vk::ClearValue { color: vk::ClearColorValue {float32: [0.2, 0.3, 0.9, 1.0]} },
                 vk::ClearValue { color: vk::ClearColorValue {float32: [0.0, 0.0, 0.0, 0.0]} },
             ])

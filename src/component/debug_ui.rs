@@ -81,20 +81,14 @@ impl Component for DebugUI {
     fn respond_event(&mut self, event: WorldEvent) -> ComponentEventResponse {
         match event {
             WorldEvent::UserFaceDir(new_dir) => {
-                match new_dir {
-                    CardinalDir::EAST => {
-                        self.ui_data.face_direction = String::from("EAST");
-                    }
-                    CardinalDir::SOUTH => {
-                        self.ui_data.face_direction = String::from("SOUTH");
-                    }
-                    CardinalDir::WEST => {
-                        self.ui_data.face_direction = String::from("WEST");
-                    }
-                    CardinalDir::NORTH => {
-                        self.ui_data.face_direction = String::from("NORTH");
-                    }
-                }
+                let dir_name = match new_dir {
+                    CardinalDir::EAST => { String::from("EAST") }
+                    CardinalDir::SOUTH => { String::from("SOUTH") }
+                    CardinalDir::WEST => { String::from("WEST") }
+                    CardinalDir::NORTH => { String::from("NORTH") }
+                    CardinalDir::UNDEFINED => { String::from("[UNDEFINED]") }
+                };
+                self.ui_data.face_direction = format!("Direction: {}", dir_name);
             }
             _ => {}
         }

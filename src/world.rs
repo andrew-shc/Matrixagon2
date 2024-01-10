@@ -12,13 +12,15 @@ pub(crate) enum CardinalDir {
     EAST,
     SOUTH,
     WEST,
-    NORTH
+    NORTH,
+    UNDEFINED,
 }
 
 #[derive(Copy, Clone)]
 pub(crate) enum WorldEvent {
-    // tick events
+    // general sync events
     Tick,
+    Start,
     // window events
     LeftButtonPressed,
     LeftButtonReleased,
@@ -52,7 +54,7 @@ impl World {
         World {
             dbgv,
             components,
-            events: Vec::new(),
+            events: vec![WorldEvent::Start],
             events_buffer: Vec::new(),
             persistent_state: WorldState::default(),
             persistent_state_buffer: WorldState::default(),
@@ -81,8 +83,6 @@ impl World {
 
     // TODO: make new events from component return from the consistent update() method instead of read events
     pub(crate) fn update(&mut self) {
-        mem::swap(&mut self.events, &mut self.events_buffer);
-        self.events_buffer.clear();
 
         let mut new_states = Vec::with_capacity(self.components.len());
 
@@ -102,6 +102,8 @@ impl World {
         // TODO: implement states diffing (making sure components handle all writing collision)
 
         self.events.clear();
+        mem::swap(&mut self.events, &mut self.events_buffer);
+        self.events_buffer.clear();
     }
 
     pub(crate) fn render(&self, shader: &mut Box<dyn Shader>) {

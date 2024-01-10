@@ -7,10 +7,10 @@ use crate::swapchain::SwapchainManager;
 use crate::util::create_local_image;
 
 
+// presentation attachment is not included
+// all AttachmentRef refers to all elective attachments (including depth/stencil)
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum AttachmentRef {
-    Presentation,  // ignore (uses the same color format) created by Swapchain
-    PresentationInput,  // a presentation attachment that is also used as input attachment at the same subpass
     Color,
     ColorInput,  // color attachment that can be also used as input (attachments)
     Depth, // uses its own depth format
@@ -37,7 +37,9 @@ impl FramebufferManager {
 
     pub(crate) unsafe fn new_swapchain_bounded(
         dbv: DebugVisibility, vi: Rc<VulkanInstance>, device: Rc<Device>, renderpass: vk::RenderPass,
-        attachments: Vec<AttachmentRef>, prsnt_imgs: Vec<vk::Image>, color_fmt: vk::Format, depth_fmt: vk::Format, extent: vk::Extent2D,
+        attachments: Vec<AttachmentRef>, prsnt_imgs: Vec<vk::Image>,
+        color_fmt: vk::Format, depth_fmt: vk::Format, extent: vk::Extent2D,
+        prsnt_inp: bool,
     ) -> Self {
         let mut attachment_imgs = Vec::new();
         let mut attachment_imgvs = Vec::new();
@@ -155,7 +157,6 @@ impl FramebufferManager {
                     attachment_imgms.push(color_img_mem);
                     inp_attachment_imgvs.push(color_view);
                 }
-                AttachmentRef::Presentation => {}
             }
         }
 
@@ -200,6 +201,9 @@ impl FramebufferManager {
                 .expect("Failed to create framebuffer");
 
             prsnt_imgvs.push(view);
+            if prsnt_inp {
+                inp_attachment_imgvs.push(view);
+            }
             framebuffers.push(fb);
         }
 
@@ -216,9 +220,9 @@ impl FramebufferManager {
                     vec![vk::DescriptorImageInfo {
                         sampler: vk::Sampler::null(),
                         image_view: *imgv,
-                        image_layout: vk::ImageLayout::READ_ONLY_OPTIMAL,
+                        image_layout: vk::ImageLayout::READ_ONLY_OPTIMAL,  // TODO: change for presentation attachment as input?
                     }],
-                    RenderDataPurpose::DebugUIInpAttachment,
+                    RenderDataPurpose::PresentationInpAttachment,  // TODO: change to variable
                 )
             })
             .collect()

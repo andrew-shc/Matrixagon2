@@ -7,6 +7,7 @@ use crate::util::{Mat4, matrix_prod};
 use crate::world::{CardinalDir, WorldEvent, WorldState};
 use std::{ffi, mem};
 use uom::{si, unit};
+use uom::fmt::DisplayStyle;
 use uom::num_traits::Zero;
 use uom::si::f32::{Angle, Length, Ratio};
 use crate::measurement::blox;
@@ -116,14 +117,22 @@ impl CameraComponent {
     }
 
     pub(crate) fn determine_dir(angle: Angle) -> CardinalDir {
-        if Angle::new::<si::angle::degree>(-45.0) < angle && angle < Angle::new::<si::angle::degree>(45.0) {
+        let mod_angle = Angle::new::<si::angle::radian>(
+            angle.value.rem_euclid(Angle::new::<si::angle::degree>(360.0).value)
+        );
+        println!("ANGLE {:?}", mod_angle.into_format_args(si::angle::degree, DisplayStyle::Abbreviation));
+        if Angle::new::<si::angle::degree>(360.0-45.0) < mod_angle || mod_angle <= Angle::new::<si::angle::degree>(0.0+45.0) {
+            // because this is at a point where the modulo jumps back to 0 and we assume the max will
+            // always be 360.0deg, so we just use ||
+            CardinalDir::NORTH
+        } else if Angle::new::<si::angle::degree>(90.0-45.0) < mod_angle && mod_angle <= Angle::new::<si::angle::degree>(90.0+45.0) {
             CardinalDir::EAST
-        } else if Angle::new::<si::angle::degree>(-135.0) < angle && angle < Angle::new::<si::angle::degree>(-45.0) {
+        } else if Angle::new::<si::angle::degree>(180.0-45.0) < mod_angle && mod_angle <= Angle::new::<si::angle::degree>(180.0+45.0) {
             CardinalDir::SOUTH
-        } else if Angle::new::<si::angle::degree>(-225.0) < angle && angle < Angle::new::<si::angle::degree>(-135.0) {
+        } else if Angle::new::<si::angle::degree>(270.0-45.0) < mod_angle && mod_angle <= Angle::new::<si::angle::degree>(270.0+45.0) {
             CardinalDir::WEST
         } else {
-            CardinalDir::NORTH
+            CardinalDir::UNDEFINED
         }
     }
 
@@ -222,6 +231,9 @@ impl Component for CameraComponent {
                     }
                     _ => {}
                 }
+            }
+            WorldEvent::Start => {
+                dir_changed = true;
             }
             _ => {}
         }

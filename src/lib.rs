@@ -76,6 +76,8 @@ impl MatrixagonApp {
         - VulkanHandler [created at the end to provide the render context]
          */
 
+        let prsnt_inp = true;
+
         let initial_extent = if fullscreen {
             vk::Extent2D {
                 width: 2560,
@@ -167,7 +169,7 @@ impl MatrixagonApp {
             world.load_descriptors(handler.cmd_pool, handler.gfxs_queue)
         };
         let swpc = unsafe {
-            SwapchainManager::new(debug_visibility, handler.vi.clone(), handler.device.clone(), shader.renderpass(), shader.attachments())
+            SwapchainManager::new(debug_visibility, handler.vi.clone(), handler.device.clone(), shader.renderpass(), shader.attachments(), prsnt_inp)
         };
         descriptors.append(&mut unsafe { swpc.fbm.get_input_attachment_descriptors() });
         unsafe { shader.write_descriptors(descriptors); }
