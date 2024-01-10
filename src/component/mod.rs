@@ -13,7 +13,9 @@ pub enum RenderDataPurpose {
     CameraViewProjection,
     BlockTextures,
     TerrainVertices,
+    PresentationInpAttachment,
     DebugUI,
+    DebugUIInpAttachment,
 }
 
 // TODO: initial render data & update render data

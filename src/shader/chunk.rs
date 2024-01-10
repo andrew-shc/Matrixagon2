@@ -5,6 +5,7 @@ use crate::component::{RenderData, RenderDataPurpose};
 use crate::framebuffer::AttachmentRef;
 use crate::{get_vertex_inp, offset_of};
 use crate::shader::{DescriptorManager, destroy_shader_modules, gen_shader_modules_info, get_vertex_inp, Shader};
+use crate::shader::debug_ui::DebugUISubShader;
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct ChunkVertex {
@@ -23,19 +24,22 @@ pub struct ChunkRasterizer {
     terrain_ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
 
     descriptor: DescriptorManager,
+
+    debug_ui_sub_shader: DebugUISubShader,
 }
 
 impl ChunkRasterizer {
     pub(crate) unsafe fn new(device: Rc<Device>, extent: vk::Extent2D, color_format: vk::Format,
-                             depth_format: vk::Format, descriptor_buffers: Vec<RenderData>,) -> Self {
+                             depth_format: vk::Format) -> Self {
         let mut descriptor = DescriptorManager::new(device.clone(), vec![
             vec![  // set 0 for shader
                 (vk::DescriptorType::UNIFORM_BUFFER, vk::ShaderStageFlags::VERTEX),  // proj-view
                 (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT),  // textures
             ],
-            // vec![  // TODO: set 1 for ui
-            //     (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT),
-            // ],
+            vec![  // TODO: set 1 for ui
+                (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT), // egui debug ui texture
+                (vk::DescriptorType::INPUT_ATTACHMENT, vk::ShaderStageFlags::FRAGMENT), // input attachment from previous
+            ],
         ]);
 
         // GRAPHICS PIPELINE
@@ -106,7 +110,19 @@ impl ChunkRasterizer {
             ..Default::default()
         };
 
-        let color_attachment = vk::AttachmentDescription {
+        let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
+            depth_test_enable: vk::TRUE,
+            depth_write_enable: vk::TRUE,
+            depth_compare_op: vk::CompareOp::GREATER,
+            depth_bounds_test_enable: vk::FALSE,
+            stencil_test_enable: vk::FALSE,
+            ..Default::default()
+        };
+
+        // SUBPASS & ATTACHMENTS
+
+        // TODO: DEBUG UI SENSITIVE
+        let comp_attachment = vk::AttachmentDescription {
             format: color_format,
             samples: vk::SampleCountFlags::TYPE_1,
             load_op: vk::AttachmentLoadOp::CLEAR,
@@ -118,9 +134,16 @@ impl ChunkRasterizer {
             ..Default::default()
         };
 
-        let color_attachment_ref = vk::AttachmentReference {
-            attachment: 0,
-            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        let color_attachment = vk::AttachmentDescription {
+            format: color_format,
+            samples: vk::SampleCountFlags::TYPE_1,
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::STORE,
+            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            ..Default::default()
         };
 
         let depth_attachment = vk::AttachmentDescription {
@@ -135,49 +158,48 @@ impl ChunkRasterizer {
             ..Default::default()
         };
 
-        let depth_attachment_ref = vk::AttachmentReference {
-            attachment: 1,
-            layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        };
-
+        let main_color_attachment_ref = vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL };
+        let depth_attachment_ref = vk::AttachmentReference { attachment: 2, layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
         let subpass = vk::SubpassDescription::builder()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-            .color_attachments(&[color_attachment_ref])
+            .color_attachments(&[main_color_attachment_ref])
             .depth_stencil_attachment(&depth_attachment_ref)
             .build();
 
-        // {
-        //     pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
-        //     color_attachment_count: 1,
-        //     p_color_attachments: &color_attachment_ref,
-        //     ..Default::default()
-        // };
+        let inp_attachment_ref = vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL };
+        let color_attachment_ref = vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL };
+        let comp_subpass = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .input_attachments(&[inp_attachment_ref])
+            .color_attachments(&[color_attachment_ref])
+            .build();
 
         let dependency = vk::SubpassDependency {
             src_subpass: vk::SUBPASS_EXTERNAL,
             dst_subpass: 0,
             src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-            src_access_mask: vk::AccessFlags::empty(),
             dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            src_access_mask: vk::AccessFlags::empty(),
             dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
             ..Default::default()
         };
 
-        let renderpass_info = vk::RenderPassCreateInfo::builder()
-            .attachments(&[color_attachment, depth_attachment])
-            .subpasses(&[subpass])
-            .dependencies(&[dependency])
-            .build();
-        let renderpass = device.create_render_pass(&renderpass_info, None).unwrap();
-
-        let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
-            depth_test_enable: vk::TRUE,
-            depth_write_enable: vk::TRUE,
-            depth_compare_op: vk::CompareOp::GREATER,
-            depth_bounds_test_enable: vk::FALSE,
-            stencil_test_enable: vk::FALSE,
+        let comp_dependency = vk::SubpassDependency {
+            src_subpass: 0,
+            dst_subpass: 1,
+            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            dst_stage_mask: vk::PipelineStageFlags::FRAGMENT_SHADER,
+            src_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            dst_access_mask: vk::AccessFlags::INPUT_ATTACHMENT_READ,
             ..Default::default()
         };
+
+        let renderpass_info = vk::RenderPassCreateInfo::builder()
+            .attachments(&[comp_attachment, color_attachment, depth_attachment])
+            .subpasses(&[subpass, comp_subpass])
+            .dependencies(&[dependency, comp_dependency])
+            .build();
+        let renderpass = device.create_render_pass(&renderpass_info, None).unwrap();
 
         // PIPELINE CREATION
 
@@ -201,21 +223,12 @@ impl ChunkRasterizer {
 
         let gfxs_pipeline = device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None).unwrap();
 
-        for render_data in descriptor_buffers {
-            match render_data {
-                RenderData::InitialDescriptorBuffer(buf, RenderDataPurpose::CameraViewProjection) => {
-                    descriptor.write_buffer(0, 0, buf);
-                },
-                RenderData::InitialDescriptorImage(img, RenderDataPurpose::BlockTextures) => {
-                    descriptor.write_image(0, 1, img);
-                },
-                _ => {},
-            }
-        }
-
         destroy_shader_modules(device.clone(), shader_modules);
 
         Self {
+            // TODO: DEBUG UI SENSITIVE
+            debug_ui_sub_shader: DebugUISubShader::new(device.clone(), extent, descriptor.pipeline_layout, renderpass),
+
             device: device.clone(),
             extent,
             renderpass,
@@ -233,23 +246,43 @@ impl Shader for ChunkRasterizer {
     }
 
     fn attachments(&self) -> Vec<AttachmentRef> {
-        vec![
-            AttachmentRef::Presentation,  // final composition
-            AttachmentRef::Depth,  // depth & color for the main rendering blocks
-            AttachmentRef::Color,
+        vec![  // TODO: DEBUG UI SENSITIVE
+            AttachmentRef::Presentation,  // final composition (for debug UI)
+            AttachmentRef::ColorInput,  // depth & color for the main rendering blocks
+            AttachmentRef::Depth,
         ]
+    }
+
+    unsafe fn write_descriptors(&mut self, descriptor_buffers: Vec<RenderData>) {
+        for render_data in descriptor_buffers {
+            match render_data {
+                RenderData::InitialDescriptorBuffer(buf, RenderDataPurpose::CameraViewProjection) => {
+                    self.descriptor.write_buffer(0, 0, buf);
+                },
+                RenderData::InitialDescriptorImage(img, RenderDataPurpose::BlockTextures) => {
+                    self.descriptor.write_image(0, 1, img);
+                },
+                // TODO: DEBUG UI SENSITIVE
+                RenderData::InitialDescriptorImage(img, RenderDataPurpose::DebugUI) => {
+                    self.descriptor.write_image(1, 0, img);
+                }
+                RenderData::InitialDescriptorImage(img, RenderDataPurpose::DebugUIInpAttachment) => {
+                    self.descriptor.write_image(1, 1, img);
+                }
+                _ => {},
+            }
+        }
     }
 
     fn update_extent(&mut self, new_extent: vk::Extent2D) {
         self.extent = new_extent;
+        self.debug_ui_sub_shader.update_extent(new_extent);
     }
 
     fn recreate_buffer(&mut self, render_data: RenderData) {
         match render_data {
             RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainVertices) => unsafe {
-                println!("RECREATE VBO: {:?}", buf);
                 if let Some((old_buf, old_mem)) = self.terrain_vbo {
-                    println!("DEL OLD VBO");
                     self.device.device_wait_idle().unwrap();
                     self.device.destroy_buffer(old_buf, None);
                     self.device.free_memory(old_mem, None);
@@ -257,14 +290,32 @@ impl Shader for ChunkRasterizer {
                 self.terrain_vbo = Some((buf, mem));
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainVertices) => unsafe {
-                println!("RECREATE IBO: {:?}", len);
                 if let Some((old_buf, old_mem, _)) = self.terrain_ibo {
-                    println!("DEL OLD IBO");
                     self.device.device_wait_idle().unwrap();
                     self.device.destroy_buffer(old_buf, None);
                     self.device.free_memory(old_mem, None);
                 }
                 self.terrain_ibo = Some((buf, mem, len));
+            }
+            // TODO: DEBUG UI SENSITIVE
+            RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::DebugUI) => unsafe {
+                if let Some((old_buf, old_mem)) = self.debug_ui_sub_shader.ui_vbo {
+                    self.device.device_wait_idle().unwrap();
+                    self.device.destroy_buffer(old_buf, None);
+                    self.device.free_memory(old_mem, None);
+                }
+                self.debug_ui_sub_shader.ui_vbo = Some((buf, mem));
+            }
+            RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::DebugUI) => unsafe {
+                if let Some((old_buf, old_mem, _)) = self.debug_ui_sub_shader.ui_ibo {
+                    self.device.device_wait_idle().unwrap();
+                    self.device.destroy_buffer(old_buf, None);
+                    self.device.free_memory(old_mem, None);
+                }
+                self.debug_ui_sub_shader.ui_ibo  = Some((buf, mem, len));
+            }
+            RenderData::SetScissorDynamicState(scissor, RenderDataPurpose::DebugUI) => unsafe {
+                self.debug_ui_sub_shader.scissor.replace(scissor);
             }
             _ => {},
         }
@@ -281,6 +332,8 @@ impl Shader for ChunkRasterizer {
             .framebuffer(framebuffer)
             .render_area(vk::Rect2D { offset: vk::Offset2D {x:0, y:0}, extent: self.extent})
             .clear_values(&[
+                // TODO: DEBUG UI SENSITIVE
+                vk::ClearValue { color: vk::ClearColorValue {float32: [1.0, 0.0, 0.0, 1.0]} },
                 vk::ClearValue { color: vk::ClearColorValue {float32: [0.2, 0.3, 0.9, 1.0]} },
                 vk::ClearValue { color: vk::ClearColorValue {float32: [0.0, 0.0, 0.0, 0.0]} },
             ])
@@ -315,10 +368,14 @@ impl Shader for ChunkRasterizer {
         self.device.cmd_draw_indexed(cmd_buf, self.terrain_ibo.unwrap().2, 1, 0, 0, 0);
         // self.device.cmd_draw(cmd_buf, self.vertices.len() as u32, 1, 0, 0);
 
+        self.debug_ui_sub_shader.draw_pipeline(cmd_buf, &self.descriptor);
+
         self.device.cmd_end_render_pass(cmd_buf);
     }
 
     unsafe fn destroy(&self) {
+        self.debug_ui_sub_shader.destroy();
+
         if let Some((old_buf, old_mem)) = self.terrain_vbo {
             self.device.destroy_buffer(old_buf, None);
             self.device.free_memory(old_mem, None);

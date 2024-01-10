@@ -12,7 +12,6 @@ use winit::window::Window;
 use crate::debug::DebugVisibility;
 use crate::shader::Shader;
 use crate::swapchain::{query_swapchain_support, SwapchainManager};
-use crate::util::create_local_depth_image;
 
 
 const DEVICE_EXTS: &[*const c_char] = &[

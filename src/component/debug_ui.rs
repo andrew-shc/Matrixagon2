@@ -2,18 +2,32 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use ash::{Device, vk};
 use ash::vk::{CommandPool, Queue};
-use egui::{ClippedPrimitive, Color32, ColorImage, FontImage, ImageData, Mesh, RawInput, TextureFilter, TextureId};
+use egui::{ClippedPrimitive, Color32, ColorImage, Context, FontImage, ImageData, Mesh, RawInput, TextureFilter, TextureId};
 use egui::epaint::{ImageDelta, Primitive, Vertex};
 use crate::component::{Component, ComponentEventResponse, RenderData, RenderDataPurpose};
+use crate::component::terrain::CubeFaceDir;
 use crate::handler::VulkanInstance;
-use crate::util::{cmd_recording, create_host_buffer, create_local_color_image};
-use crate::world::{WorldEvent, WorldState};
+use crate::util::{cmd_recording, create_host_buffer, create_local_image};
+use crate::world::{CardinalDir, WorldEvent, WorldState};
 
+
+#[derive(Clone)]
+pub(crate) struct DebugUIData {
+    face_direction: String,
+}
+
+impl Default for DebugUIData {
+    fn default() -> Self {
+        Self {
+            face_direction: String::from("<UNDEFINED>"),
+        }
+    }
+}
 
 pub(crate) struct DebugUI {
     ui_handler: EguiHandler,
     render_data: Vec<(Vec<Vertex>, Vec<u32>, vk::Rect2D, TextureId)>,
-    // render_data_buf: Vec<(vk>,
+    pub(crate) ui_data: DebugUIData,
 }
 
 impl DebugUI {
@@ -21,13 +35,22 @@ impl DebugUI {
         let mut s = Self {
             ui_handler: EguiHandler::new(vi.clone(), device.clone(), init_raw_input),
             render_data: Vec::new(),
+            ui_data: DebugUIData::default(),
         };
         unsafe {
             // needs to ensure ui_handler is display() ed before to obtain texture
-            let mut render_data = s.ui_handler.display();
+            let mut render_data = s.ui_handler.display(s.ui_data.clone(), Self::ui_program());
             s.render_data.append(&mut render_data);
         }
         s
+    }
+
+    fn ui_program() -> impl FnOnce(&Context, DebugUIData) {
+        |ctx: &Context, data: DebugUIData| {
+            egui::CentralPanel::default().show(&ctx, |ui| {
+                ui.label(data.face_direction);
+            });
+        }
     }
 }
 
@@ -36,7 +59,7 @@ impl Component for DebugUI {
         // TODO: do we need to make sure the buffer object lasts long through DebugUI?
 
         // TODO: assuming a single render data
-        let (vert, indx, viewport, _) = &self.render_data[0];
+        let (vert, indx, scissor, _) = &self.render_data[0];
 
         // no staging buffer for DebugUI, since it is debug and you would want the fastest update (and its just UI)
 
@@ -49,21 +72,41 @@ impl Component for DebugUI {
         };
 
         vec![
-            // RenderData::RecreateVertexBuffer(vertex_buffer, vertex_buffer_mem, RenderDataPurpose::DebugUI),
-            // RenderData::RecreateIndexBuffer(index_buffer, index_buffer_mem, indx.len() as u32, RenderDataPurpose::DebugUI),
-            // RenderData::SetScissorDynamicState(*viewport, RenderDataPurpose::DebugUI),
+            RenderData::RecreateVertexBuffer(vertex_buffer, vertex_buffer_mem, RenderDataPurpose::DebugUI),
+            RenderData::RecreateIndexBuffer(index_buffer, index_buffer_mem, indx.len() as u32, RenderDataPurpose::DebugUI),
+            RenderData::SetScissorDynamicState(*scissor, RenderDataPurpose::DebugUI),
         ]
     }
 
     fn respond_event(&mut self, event: WorldEvent) -> ComponentEventResponse {
+        match event {
+            WorldEvent::UserFaceDir(new_dir) => {
+                match new_dir {
+                    CardinalDir::EAST => {
+                        self.ui_data.face_direction = String::from("EAST");
+                    }
+                    CardinalDir::SOUTH => {
+                        self.ui_data.face_direction = String::from("SOUTH");
+                    }
+                    CardinalDir::WEST => {
+                        self.ui_data.face_direction = String::from("WEST");
+                    }
+                    CardinalDir::NORTH => {
+                        self.ui_data.face_direction = String::from("NORTH");
+                    }
+                }
+            }
+            _ => {}
+        }
+
         // TODO: for creating raw input
-        self.ui_handler.modify_raw_input(event);
+        // self.ui_handler.modify_raw_input(event);
 
         ComponentEventResponse::default()
     }
 
     fn update_state(&mut self, state: &mut WorldState) {
-
+        unsafe { self.render_data = self.ui_handler.display(self.ui_data.clone(), Self::ui_program()); }
     }
 
     unsafe fn load_descriptors(&mut self, cmd_pool: CommandPool, queue: Queue) -> Vec<RenderData> {
@@ -77,20 +120,18 @@ impl Component for DebugUI {
         });
         self.ui_handler.create_img_views();
 
-        // self.ui_handler.textures.iter()
-        //     .map(|(_, txtr_descriptor)| {
-        //         RenderData::InitialDescriptorImage(
-        //             vec![vk::DescriptorImageInfo {
-        //                 image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        //                 image_view: txtr_descriptor.img_view.unwrap(),
-        //                 sampler: txtr_descriptor.sampler,
-        //             }],
-        //             RenderDataPurpose::DebugUI,
-        //         )
-        //     })
-        //     .collect::<Vec<RenderData>>()
-
-        vec![]
+        self.ui_handler.textures.iter()
+            .map(|(_, txtr_descriptor)| {
+                RenderData::InitialDescriptorImage(
+                    vec![vk::DescriptorImageInfo {
+                        image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        image_view: txtr_descriptor.img_view.unwrap(),
+                        sampler: txtr_descriptor.sampler,
+                    }],
+                    RenderDataPurpose::DebugUI,
+                )
+            })
+            .collect::<Vec<RenderData>>()
     }
 
     unsafe fn destroy_descriptor(&mut self) {
@@ -138,21 +179,16 @@ impl EguiHandler {
 
     }
 
-    unsafe fn display(&mut self) -> Vec<(Vec<Vertex>, Vec<u32>, vk::Rect2D, TextureId)> {
+    unsafe fn display(&mut self, data: DebugUIData, cb: impl FnOnce(&Context, DebugUIData)) -> Vec<(Vec<Vertex>, Vec<u32>, vk::Rect2D, TextureId)> {
         // TODO: aggregate all the events here and create raw input only in here
         // TODO: custom closure that also pass in dynamic info (vector of trait object that describes
         // TODO: ... what data it is and check compatibility between component updates and UI's compatibility
+
         let full_output = self.ctx.run(self.raw_input.clone(), |ctx| {
-            egui::CentralPanel::default().show(&ctx, |ui| {
-                ui.label("Hello world!");
-                if ui.button("Click me").clicked() {
-                    // take some action here
-                    println!("CLICKED!!");
-                }
-            });
+            cb(ctx, data);
         });
         // non render output from egui
-        let non_render_output = full_output.platform_output;
+        let _non_render_output = full_output.platform_output;
 
         // render output from egui
         let clipped_primitives = self.ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
@@ -171,7 +207,7 @@ impl EguiHandler {
                 },
             };
             if let Primitive::Mesh(Mesh {indices, vertices, texture_id: txtr_id}) = primitive {
-                // println!("MESH {txtr_id:?}");
+                // println!("MESH {indices:?} {vertices:?}");
                 primitive_meshes.push((vertices, indices, scissor, txtr_id));
             }
         }
@@ -224,7 +260,7 @@ impl EguiHandler {
 
                     let (buf, buf_mem, _, _) = create_host_buffer(self.vi.clone(), self.device.clone(), bytes, vk::BufferUsageFlags::TRANSFER_SRC, true);
 
-                    let (img, img_mem) = create_local_color_image(self.vi.clone(), self.device.clone(), img_extent, vk::Format::R8G8B8A8_SRGB);
+                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,);
 
                     (buf, buf_mem, img, img_mem, img_extent)
                 }
@@ -249,7 +285,7 @@ impl EguiHandler {
 
                     let (buf, buf_mem, _, _) = create_host_buffer(self.vi.clone(), self.device.clone(), &bytes, vk::BufferUsageFlags::TRANSFER_SRC, true);
 
-                    let (img, img_mem) = create_local_color_image(self.vi.clone(), self.device.clone(), img_extent, vk::Format::R8G8B8A8_SRGB);
+                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,);
 
                     (buf, buf_mem, img, img_mem, img_extent)
                 }
@@ -258,15 +294,15 @@ impl EguiHandler {
             let sampler_info = vk::SamplerCreateInfo {
                 mag_filter: Self::convert_filter(options.magnification),
                 min_filter: Self::convert_filter(options.minification),
-                address_mode_u: vk::SamplerAddressMode::REPEAT,
-                address_mode_v: vk::SamplerAddressMode::REPEAT,
-                address_mode_w: vk::SamplerAddressMode::REPEAT,
+                address_mode_u: vk::SamplerAddressMode::CLAMP_TO_EDGE,
+                address_mode_v: vk::SamplerAddressMode::CLAMP_TO_EDGE,
+                address_mode_w: vk::SamplerAddressMode::CLAMP_TO_EDGE,
                 anisotropy_enable: vk::FALSE,
                 border_color: vk::BorderColor::INT_OPAQUE_BLACK,
                 unnormalized_coordinates: vk::FALSE,
                 compare_enable: vk::FALSE,
                 compare_op: vk::CompareOp::ALWAYS,
-                mipmap_mode: vk::SamplerMipmapMode::LINEAR,
+                mipmap_mode: vk::SamplerMipmapMode::NEAREST,
                 mip_lod_bias: 0.0,
                 min_lod: 0.0,
                 max_lod: 0.0,

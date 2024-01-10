@@ -1,10 +1,10 @@
 use std::rc::Rc;
 use ash::{Device, vk};
 use ash::extensions::khr::Swapchain;
+use crate::component::RenderData;
 use crate::debug::DebugVisibility;
 use crate::framebuffer::{AttachmentRef, FramebufferManager};
 use crate::handler::VulkanInstance;
-use crate::util::create_local_depth_image;
 
 pub(crate) struct SwapchainManager {
     dbv: DebugVisibility,
@@ -27,8 +27,10 @@ pub(crate) struct SwapchainManager {
 impl SwapchainManager {
     pub(crate) unsafe fn new(
         dbv: DebugVisibility, vi: Rc<VulkanInstance>, device: Rc<Device>,
-        renderpass: vk::RenderPass, attachments: Vec<AttachmentRef>
+        renderpass: vk::RenderPass, attachments: Vec<AttachmentRef>, prsnt_inp: bool,
     ) -> Self {
+        // prsnt_inp: make the presentation attachment also an input attachment
+
         let (capb, fmt, prsnt) = query_swapchain_support(dbv, &vi);
         let (fmt, prsnt) = select_swapchain_support(fmt, prsnt);
 
@@ -42,7 +44,11 @@ impl SwapchainManager {
             image_color_space: fmt.color_space,
             image_extent: capb.current_extent,
             image_array_layers: 1,
-            image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            image_usage: if prsnt_inp {
+                vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::INPUT_ATTACHMENT
+            }  else {
+                vk::ImageUsageFlags::COLOR_ATTACHMENT
+            },
             image_sharing_mode: vk::SharingMode::EXCLUSIVE,
             pre_transform: capb.current_transform,
             composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
@@ -63,7 +69,7 @@ impl SwapchainManager {
             .expect("Failed to get swapchain images");
 
         let fbm = FramebufferManager::new_swapchain_bounded(
-            vi.clone(), device.clone(), renderpass, attachments.clone(), swapchain_images,
+            dbv, vi.clone(), device.clone(), renderpass, attachments.clone(), swapchain_images,
             fmt.format, best_depth_format_support(), capb.current_extent
         );
 
@@ -77,8 +83,6 @@ impl SwapchainManager {
     pub(crate) unsafe fn recreate(&mut self) {
         let (capb, fmt, prsnt) = query_swapchain_support(self.dbv, &self.vi);
         let (fmt, prsnt) = select_swapchain_support(fmt, prsnt);
-
-        let swapchain_loader = Swapchain::new(&self.vi.inst, &self.device);
 
         // assuming graphics and presentation queue families are the same ind.
         let swapchain_create_info = vk::SwapchainCreateInfoKHR {
@@ -98,24 +102,26 @@ impl SwapchainManager {
             ..Default::default()
         };
 
-        let swapchain = swapchain_loader.create_swapchain(&swapchain_create_info, None)
+        let swapchain = self.loader.create_swapchain(&swapchain_create_info, None)
             .expect("Failed to create swapchain");
 
         if self.dbv.vk_swapchain_output {
             println!("Swapchain Object: {:?}", swapchain);
         }
 
-        let swapchain_images = swapchain_loader.get_swapchain_images(swapchain)
+        let swapchain_images = self.loader.get_swapchain_images(swapchain)
             .expect("Failed to get swapchain images");
 
         let fbm = FramebufferManager::new_swapchain_bounded(
-            self.vi.clone(), self.device.clone(), self.renderpass, self.attachments.clone(), swapchain_images,
+            self.dbv, self.vi.clone(), self.device.clone(), self.renderpass, self.attachments.clone(), swapchain_images,
             fmt.format, best_depth_format_support(), capb.current_extent
         );
 
+        self.device.device_wait_idle().unwrap();
         self.destroy();
 
         self.fbm = fbm;
+        self.swapchain = swapchain;
     }
 
     pub(crate) unsafe fn destroy(&self) {

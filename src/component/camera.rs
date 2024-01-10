@@ -4,7 +4,7 @@ use winit::event::VirtualKeyCode;
 use crate::component::{Component, ComponentEventResponse, RenderData, RenderDataPurpose};
 use crate::handler::VulkanInstance;
 use crate::util::{Mat4, matrix_prod};
-use crate::world::{WorldEvent, WorldState};
+use crate::world::{CardinalDir, WorldEvent, WorldState};
 use std::{ffi, mem};
 use uom::{si, unit};
 use uom::num_traits::Zero;
@@ -55,6 +55,7 @@ pub(crate) struct CameraComponent {
     r: Rotation,
     translations: Vec<VirtualKeyCode>,
     rotated: bool,
+    direction: CardinalDir,
     // view
     rot_x: Mat4,
     rot_y: Mat4,
@@ -74,7 +75,7 @@ impl CameraComponent {
         CameraComponent {
             descriptor: unsafe { CameraDescriptor::new(vi.clone(), device.clone()) },
             trans_speed, rot_speed, t: Length3D::default(), r: Rotation::default(),
-            translations: Vec::new(), rotated: false,
+            translations: Vec::new(), rotated: false, direction: Self::determine_dir(Angle::zero()),
             rot_x: Self::rot_x_mat(0.0),
             rot_y: Self::rot_y_mat(0.0),
             rot_z: Self::rot_z_mat(0.0),
@@ -112,6 +113,18 @@ impl CameraComponent {
     pub(crate) fn move_vertical(&mut self, multiplier: i64) {
         self.t.y = self.t.y+Length::new::<blox>(multiplier as f32*self.trans_speed);
         self.trans = Self::trans_mat(self.t);
+    }
+
+    pub(crate) fn determine_dir(angle: Angle) -> CardinalDir {
+        if Angle::new::<si::angle::degree>(-45.0) < angle && angle < Angle::new::<si::angle::degree>(45.0) {
+            CardinalDir::EAST
+        } else if Angle::new::<si::angle::degree>(-135.0) < angle && angle < Angle::new::<si::angle::degree>(-45.0) {
+            CardinalDir::SOUTH
+        } else if Angle::new::<si::angle::degree>(-225.0) < angle && angle < Angle::new::<si::angle::degree>(-135.0) {
+            CardinalDir::WEST
+        } else {
+            CardinalDir::NORTH
+        }
     }
 
     pub(crate) fn view_mat(&self) -> Mat4 {
@@ -177,6 +190,7 @@ impl Component for CameraComponent {
     }
 
     fn respond_event(&mut self, event: WorldEvent) -> ComponentEventResponse {
+        let mut dir_changed = false;
         match event {
             WorldEvent::MouseMotion((x, y)) => {
                 self.rotate(Rotation {
@@ -185,6 +199,11 @@ impl Component for CameraComponent {
                     z: Angle::new::<si::angle::degree>(0.0)
                 });
                 self.rotated = true;
+
+                if self.direction != Self::determine_dir(self.r.y) {
+                    self.direction = Self::determine_dir(self.r.y);
+                    dir_changed = true;
+                }
             }
             WorldEvent::KeyPressed(key) => {
                 match key {
@@ -207,7 +226,12 @@ impl Component for CameraComponent {
             _ => {}
         }
 
-        ComponentEventResponse(vec![], false)
+        let mut new_events = Vec::new();
+        if dir_changed {
+            new_events.push(WorldEvent::UserFaceDir(self.direction));
+        }
+
+        ComponentEventResponse(new_events, false)
     }
 
     fn update_state(&mut self, _state: &mut WorldState) {

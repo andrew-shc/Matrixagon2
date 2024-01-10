@@ -1,6 +1,7 @@
 use std::{ffi, mem};
 use std::rc::Rc;
 use ash::{Device, vk};
+use crate::debug::DebugVisibility;
 use crate::handler::VulkanInstance;
 
 // column major
@@ -92,8 +93,8 @@ pub(crate) unsafe fn cmd_recording<C: FnMut(vk::CommandBuffer) -> ()>(
 //     (img, img_mem, data_ptr, img_size)
 // }
 
-pub(crate) unsafe fn create_local_color_image(
-    vi: Rc<VulkanInstance>, device: Rc<Device>, img_extent: vk::Extent3D, format: vk::Format,
+pub(crate) unsafe fn create_local_image(
+    vi: Rc<VulkanInstance>, device: Rc<Device>, img_extent: vk::Extent3D, format: vk::Format, usage: vk::ImageUsageFlags,
 ) -> (vk::Image, vk::DeviceMemory) {
     let image_info = vk::ImageCreateInfo {
         image_type: vk::ImageType::TYPE_2D,
@@ -103,31 +104,7 @@ pub(crate) unsafe fn create_local_color_image(
         format,
         tiling: vk::ImageTiling::OPTIMAL,
         initial_layout: vk::ImageLayout::UNDEFINED,
-        usage: vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
-        samples: vk::SampleCountFlags::TYPE_1,
-        sharing_mode: vk::SharingMode::EXCLUSIVE,
-        ..Default::default()
-    };
-
-    let (img, img_mem) = allocate_image(
-        vi.clone(), device.clone(), &image_info, vk::MemoryPropertyFlags::DEVICE_LOCAL
-    );
-
-    (img, img_mem)
-}
-
-pub(crate) unsafe fn create_local_depth_image(
-    vi: Rc<VulkanInstance>, device: Rc<Device>, img_extent: vk::Extent3D, format: vk::Format,
-) -> (vk::Image, vk::DeviceMemory) {
-    let image_info = vk::ImageCreateInfo {
-        image_type: vk::ImageType::TYPE_2D,
-        extent: img_extent,
-        mip_levels: 1,
-        array_layers: 1,
-        format,
-        tiling: vk::ImageTiling::OPTIMAL,
-        initial_layout: vk::ImageLayout::UNDEFINED,
-        usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+        usage,
         samples: vk::SampleCountFlags::TYPE_1,
         sharing_mode: vk::SharingMode::EXCLUSIVE,
         ..Default::default()
@@ -206,7 +183,7 @@ pub(crate) unsafe fn allocate_buffer<D>(
     let buffer = device.create_buffer(&buffer_info, None).unwrap();
 
     let mem_req = device.get_buffer_memory_requirements(buffer);
-    println!("Memory requirements {mem_req:?}");
+    // println!("Memory requirements {mem_req:?}");
 
     let mem_alloc_info = vk::MemoryAllocateInfo {
         allocation_size: mem_req.size,
@@ -223,7 +200,7 @@ pub(crate) unsafe fn allocate_buffer<D>(
 pub(crate) unsafe fn find_memory_type(vi: Rc<VulkanInstance>, mem_req: vk::MemoryRequirements,
                                       props: vk::MemoryPropertyFlags) -> u32 {
     let mem_props = vi.get_physical_device_memory_properties();
-    println!("Available memory requirements {mem_req:?}");
+    // println!("Available memory requirements {mem_req:?}");
 
     for i in 0..mem_props.memory_type_count {
         if (mem_req.memory_type_bits & (1 << i) != 0) &&

@@ -4,7 +4,7 @@ use ash::{Device, vk};
 use png;
 use crate::component::{Component, ComponentEventResponse, RenderData, RenderDataPurpose};
 use crate::handler::VulkanInstance;
-use crate::util::{cmd_recording, create_host_buffer, create_local_color_image};
+use crate::util::{cmd_recording, create_host_buffer, create_local_image};
 use crate::world::{WorldEvent, WorldState};
 
 pub(crate) struct TextureHandler {
@@ -40,7 +40,7 @@ impl TextureHandler {
         unsafe {
             let (buf, buf_mem, _, _) = create_host_buffer(vi.clone(), device.clone(), bytes, vk::BufferUsageFlags::TRANSFER_SRC, true);
 
-            let (img, img_mem) = create_local_color_image(vi.clone(), device.clone(), img_extent, vk::Format::R8G8B8A8_SRGB);
+            let (img, img_mem) = create_local_image(vi.clone(), device.clone(), img_extent, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,);
 
             let sampler_info = vk::SamplerCreateInfo {
                 mag_filter: vk::Filter::NEAREST,

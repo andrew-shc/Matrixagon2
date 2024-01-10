@@ -7,13 +7,14 @@ use std::{fs, mem, process};
 use std::rc::Rc;
 use ash::{Device, vk};
 use ash::util::read_spv;
-use crate::component::RenderData;
+use crate::component::{RenderData, RenderDataPurpose};
 use crate::framebuffer::AttachmentRef;
 use crate::shader::chunk::ChunkVertex;
 
 pub trait Shader {
     fn renderpass(&self) -> vk::RenderPass;
     fn attachments(&self) -> Vec<AttachmentRef>;
+    unsafe fn write_descriptors(&mut self, descriptor_buffers: Vec<RenderData>);
     fn update_extent(&mut self, new_extent: vk::Extent2D);
     fn recreate_buffer(&mut self, render_data: RenderData);
     unsafe fn draw_command(&self, cmd_buf: vk::CommandBuffer, framebuffer: vk::Framebuffer);

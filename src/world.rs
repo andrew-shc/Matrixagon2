@@ -2,9 +2,18 @@ use std::mem;
 use ash::vk;
 use winit::event::{VirtualKeyCode};
 use crate::component::{Component, RenderData};
+use crate::component::terrain::CubeFaceDir;
 use crate::debug::DebugVisibility;
 use crate::shader::Shader;
 
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub(crate) enum CardinalDir {
+    EAST,
+    SOUTH,
+    WEST,
+    NORTH
+}
 
 #[derive(Copy, Clone)]
 pub(crate) enum WorldEvent {
@@ -21,6 +30,7 @@ pub(crate) enum WorldEvent {
     KeyPressed(VirtualKeyCode),
     KeyReleased(VirtualKeyCode),
     // app events
+    UserFaceDir(CardinalDir),
 }
 
 #[derive(Clone, Default)]
@@ -69,6 +79,7 @@ impl World {
         self.events_buffer.push(e);
     }
 
+    // TODO: make new events from component return from the consistent update() method instead of read events
     pub(crate) fn update(&mut self) {
         mem::swap(&mut self.events, &mut self.events_buffer);
         self.events_buffer.clear();

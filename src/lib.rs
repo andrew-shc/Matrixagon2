@@ -19,14 +19,16 @@
 #[macro_use]
 extern crate uom;
 
+use std::collections::HashMap;
 use ash::vk;
-use egui::RawInput;
+use egui::{Context, Id, Modifiers, Pos2, RawInput, Rect, ViewportId, ViewportIdMap, ViewportInfo};
+use egui::ahash::HashMapExt;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window, WindowBuilder};
 use crate::component::camera::CameraComponent;
-use crate::component::debug_ui::DebugUI;
+use crate::component::debug_ui::{DebugUI, DebugUIData};
 use crate::debug::DebugVisibility;
 use crate::handler::VulkanHandler;
 use crate::world::{World, WorldEvent};
@@ -103,7 +105,48 @@ impl MatrixagonApp {
 
         let mut handler = VulkanHandler::init(&event_loop, &window, validate, debug_visibility);
 
+        if debug_visibility.mtxg_output {
+            println!("WINDOW SCALE FACTOR {:?}", window.scale_factor() as f32);
+        }
+
         // let mut ui_handler = EguiHandler::new(handler.vi.clone(), handler.device.clone());
+        let init_raw_input = RawInput {
+            viewport_id: ViewportId(Id::new(0)),
+            viewports: {
+                let mut m = ViewportIdMap::new();
+                m.insert(
+                    ViewportId(Id::new(0)),
+                    ViewportInfo {
+                        parent: None,
+                        title: None,
+                        events: vec![],
+                        native_pixels_per_point: Some(window.scale_factor() as f32),
+                        monitor_size: None,
+                        inner_rect: Some(Rect {
+                            min: Pos2::from((0.0, 0.0)),
+                            max: Pos2::from((window.inner_size().width as f32, window.inner_size().height as f32))
+                        }),
+                        outer_rect: Some(Rect {
+                            min: Pos2::from((0.0, 0.0)),
+                            max: Pos2::from((window.outer_size().width as f32, window.outer_size().height as f32))
+                        }),
+                        minimized: None,
+                        maximized: None,
+                        fullscreen: Some(fullscreen),
+                        focused: Some(true),
+                    }
+                );
+                m
+            },
+            screen_rect: Some(Rect {
+                min: Pos2::from((0.0, 0.0)),
+                max: Pos2::from((160.0, 500.0))
+            }),
+            modifiers: Modifiers::default(),
+            events: Vec::new(),
+            focused: true,
+            ..Default::default()
+        };
 
         let ratio = initial_extent.width as f32/initial_extent.height as f32;
         let mut world = World::new(debug_visibility, vec![
@@ -112,23 +155,25 @@ impl MatrixagonApp {
             )),
             Box::new(Terrain::new(handler.vi.clone(), handler.device.clone())),
             Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone())),
-            // Box::new(DebugUI::new(handler.vi.clone(), handler.device.clone(), RawInput::default())),
+            Box::new(DebugUI::new(handler.vi.clone(), handler.device.clone(), init_raw_input)),
         ]);
 
         let format = best_surface_color_and_depth_format(debug_visibility, handler.vi.clone());
-        let descriptors = unsafe {
-            world.load_descriptors(handler.cmd_pool, handler.gfxs_queue)
-        };
-        println!("DESCRIPTORS {descriptors:?}");
-        let shader = unsafe {
-            ChunkRasterizer::new(handler.device.clone(), initial_extent, format.0, format.1, descriptors)
+        let mut shader = unsafe {
+            ChunkRasterizer::new(handler.device.clone(), initial_extent, format.0, format.1)
         };
 
-        handler.load_swapchain(unsafe {
+        let mut descriptors = unsafe {
+            world.load_descriptors(handler.cmd_pool, handler.gfxs_queue)
+        };
+        let swpc = unsafe {
             SwapchainManager::new(debug_visibility, handler.vi.clone(), handler.device.clone(), shader.renderpass(), shader.attachments())
-        });
+        };
+        descriptors.append(&mut unsafe { swpc.fbm.get_input_attachment_descriptors() });
+        unsafe { shader.write_descriptors(descriptors); }
+
+        handler.load_swapchain(swpc);
         handler.load_shader(shader);
-        // handler.create_swapchain(initial_extent);
 
         MatrixagonApp {
             debug_visibility,
@@ -138,7 +183,6 @@ impl MatrixagonApp {
             mouse_lock,
             world,
             handler,
-            // ui_handler,
         }
     }
 
@@ -223,17 +267,21 @@ impl MatrixagonApp {
                         if let Some(key) = virtual_keycode {
                             match state {
                                 ElementState::Pressed => {
-                                    app.world.add_window_event(WorldEvent::KeyPressed(key))
+                                    app.world.add_window_event(WorldEvent::KeyPressed(key));
                                 }
                                 ElementState::Released => {
-                                    app.world.add_window_event(WorldEvent::KeyReleased(key))
+                                    app.world.add_window_event(WorldEvent::KeyReleased(key));
+
+                                    match key {
+                                        VirtualKeyCode::Escape => {
+                                            *ctrl_flow = ControlFlow::Exit;
+                                        }
+                                        VirtualKeyCode::T => {
+                                            app.mouse_lock = !app.mouse_lock;
+                                        }
+                                        _ => {}
+                                    };
                                 }
-                            };
-                            match key {
-                                VirtualKeyCode::Escape => {
-                                    *ctrl_flow = ControlFlow::Exit;
-                                }
-                                _ => {}
                             };
                         }
                     }

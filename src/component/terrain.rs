@@ -38,7 +38,7 @@ fn gen_cube(loc: (f32, f32, f32), ind_ofs: u32) -> (Vec<ChunkVertex>, Vec<u32>) 
     )
 }
 
-enum CubeFaceDir {
+pub(crate) enum CubeFaceDir {
     FRONT,
     RIGHT,
     BACK,

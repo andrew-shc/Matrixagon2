@@ -1,15 +1,18 @@
 use std::rc::Rc;
 use ash::{Device, vk};
-use ash::vk::ImageLayout;
+use crate::component::{RenderData, RenderDataPurpose};
+use crate::debug::DebugVisibility;
 use crate::handler::VulkanInstance;
 use crate::swapchain::SwapchainManager;
-use crate::util::create_local_depth_image;
+use crate::util::create_local_image;
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) enum AttachmentRef {
-    Presentation,  // ignore (uses the same color format)
+    Presentation,  // ignore (uses the same color format) created by Swapchain
+    PresentationInput,  // a presentation attachment that is also used as input attachment at the same subpass
     Color,
+    ColorInput,  // color attachment that can be also used as input (attachments)
     Depth, // uses its own depth format
 }
 
@@ -21,6 +24,7 @@ pub(crate) struct FramebufferManager {
     attachment_imgs: Vec<vk::Image>,  // ordered as per the attachment references initial param after the presentation image (if there is one)
     attachment_imgvs: Vec<vk::ImageView>,
     attachment_imgms: Vec<vk::DeviceMemory>,
+    inp_attachment_imgvs: Vec<vk::ImageView>,
     pub(crate) framebuffers: Vec<vk::Framebuffer>,  // duplicated to the same amount as presentation images
 }
 
@@ -32,21 +36,29 @@ impl FramebufferManager {
     // }
 
     pub(crate) unsafe fn new_swapchain_bounded(
-        vi: Rc<VulkanInstance>, device: Rc<Device>, renderpass: vk::RenderPass,
+        dbv: DebugVisibility, vi: Rc<VulkanInstance>, device: Rc<Device>, renderpass: vk::RenderPass,
         attachments: Vec<AttachmentRef>, prsnt_imgs: Vec<vk::Image>, color_fmt: vk::Format, depth_fmt: vk::Format, extent: vk::Extent2D,
     ) -> Self {
         let mut attachment_imgs = Vec::new();
         let mut attachment_imgvs = Vec::new();
         let mut attachment_imgms = Vec::new();
+        let mut inp_attachment_imgvs = Vec::new();
+
+        if dbv.vk_swapchain_output {
+            println!("NEW FB ATTACHMENTS {attachments:?}");
+        }
         for attachment in attachments {
+            if dbv.vk_swapchain_output {
+                println!("FB ATTACHMENT {attachment:?}");
+            }
             match attachment {
                 AttachmentRef::Depth => {
                     // TODO: maybe we can but the image format (color, depth, etc.) separate
                     // TODO: when creating image buffer
-                    let (depth_img, depth_img_mem) = create_local_depth_image(
+                    let (depth_img, depth_img_mem) = create_local_image(
                         vi.clone(), device.clone(),
                         vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
-                        depth_fmt
+                        depth_fmt, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
                     );
 
                     let depth_imgv_create_info = vk::ImageViewCreateInfo {
@@ -75,7 +87,74 @@ impl FramebufferManager {
                     attachment_imgvs.push(depth_view);
                     attachment_imgms.push(depth_img_mem);
                 }
-                AttachmentRef::Color => {}
+                AttachmentRef::Color => {
+                    let (color_img, color_img_mem) = create_local_image(
+                        vi.clone(), device.clone(),
+                        vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
+                        color_fmt, vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                    );
+
+                    let color_imgv_create_info = vk::ImageViewCreateInfo {
+                        image: color_img,
+                        view_type: vk::ImageViewType::TYPE_2D,
+                        format: color_fmt,
+                        components: vk::ComponentMapping {
+                            r: vk::ComponentSwizzle::IDENTITY,
+                            g: vk::ComponentSwizzle::IDENTITY,
+                            b: vk::ComponentSwizzle::IDENTITY,
+                            a: vk::ComponentSwizzle::IDENTITY,
+                        },
+                        subresource_range: vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            base_mip_level: 0,
+                            level_count: 1,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        },
+                        ..Default::default()
+                    };
+                    let color_view = device.create_image_view(&color_imgv_create_info, None)
+                        .expect("Failed to create image view");
+
+                    attachment_imgs.push(color_img);
+                    attachment_imgvs.push(color_view);
+
+                    attachment_imgms.push(color_img_mem);
+                }
+                AttachmentRef::ColorInput => {
+                    let (color_img, color_img_mem) = create_local_image(
+                        vi.clone(), device.clone(),
+                        vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
+                        color_fmt, vk::ImageUsageFlags::INPUT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                    );
+
+                    let color_imgv_create_info = vk::ImageViewCreateInfo {
+                        image: color_img,
+                        view_type: vk::ImageViewType::TYPE_2D,
+                        format: color_fmt,
+                        components: vk::ComponentMapping {
+                            r: vk::ComponentSwizzle::IDENTITY,
+                            g: vk::ComponentSwizzle::IDENTITY,
+                            b: vk::ComponentSwizzle::IDENTITY,
+                            a: vk::ComponentSwizzle::IDENTITY,
+                        },
+                        subresource_range: vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            base_mip_level: 0,
+                            level_count: 1,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        },
+                        ..Default::default()
+                    };
+                    let color_view = device.create_image_view(&color_imgv_create_info, None)
+                        .expect("Failed to create image view");
+
+                    attachment_imgs.push(color_img);
+                    attachment_imgvs.push(color_view);
+                    attachment_imgms.push(color_img_mem);
+                    inp_attachment_imgvs.push(color_view);
+                }
                 AttachmentRef::Presentation => {}
             }
         }
@@ -125,8 +204,24 @@ impl FramebufferManager {
         }
 
         Self {
-            device, prsnt_imgvs, attachment_imgs, attachment_imgvs, attachment_imgms, framebuffers
+            device,prsnt_imgvs, attachment_imgs, attachment_imgvs, attachment_imgms,
+            inp_attachment_imgvs, framebuffers
         }
+    }
+
+    pub(crate) unsafe fn get_input_attachment_descriptors(&self) -> Vec<RenderData> {
+        self.inp_attachment_imgvs.iter()
+            .map(|imgv| {
+                RenderData::InitialDescriptorImage(
+                    vec![vk::DescriptorImageInfo {
+                        sampler: vk::Sampler::null(),
+                        image_view: *imgv,
+                        image_layout: vk::ImageLayout::READ_ONLY_OPTIMAL,
+                    }],
+                    RenderDataPurpose::DebugUIInpAttachment,
+                )
+            })
+            .collect()
     }
 
     pub(crate) unsafe fn destroy(&self) {
