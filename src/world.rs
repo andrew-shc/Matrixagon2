@@ -1,4 +1,5 @@
 use std::mem;
+use std::time::Duration;
 use ash::vk;
 use winit::event::{VirtualKeyCode};
 use crate::component::{Component, RenderData};
@@ -21,6 +22,7 @@ pub(crate) enum WorldEvent {
     // general sync events
     Tick,
     Start,
+    DeltaTime(Duration),
     // window events
     LeftButtonPressed,
     LeftButtonReleased,

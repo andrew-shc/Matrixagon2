@@ -20,6 +20,7 @@
 extern crate uom;
 
 use std::collections::HashMap;
+use std::time::Instant;
 use ash::vk;
 use egui::{Context, Id, Modifiers, Pos2, RawInput, Rect, ViewportId, ViewportIdMap, ViewportInfo};
 use egui::ahash::HashMapExt;
@@ -61,6 +62,8 @@ pub struct MatrixagonApp {
     // Main app fields
     world: World,
     handler: VulkanHandler,
+    // Misc
+    frame_time: Instant,
 }
 
 impl MatrixagonApp {
@@ -185,6 +188,7 @@ impl MatrixagonApp {
             mouse_lock,
             world,
             handler,
+            frame_time: Instant::now(),
         }
     }
 
@@ -196,6 +200,11 @@ impl MatrixagonApp {
         app.event_loop.run(move |e, _, ctrl_flow| match e {
             Event::NewEvents(_) => {
                 // begin events (for benchmarking)
+                let now = Instant::now();
+                let delta = now-app.frame_time;
+                app.world.add_window_event(WorldEvent::DeltaTime(delta));
+
+                app.frame_time = now;
             }
             Event::MainEventsCleared => {
                 if app.mouse_lock {
@@ -313,9 +322,9 @@ impl MatrixagonApp {
 //     use super::*;
 //
 //     #[test]
-//     fn general() {
-//         let mtxg = Matrixagon::init(false);
-//         // mtxg.load_shader(StandardRasterizer::new());
-//         mtxg.run();
+//     fn test_fps_clock() {
+//         loop {
+//             thread
+//         }
 //     }
 // }

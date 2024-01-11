@@ -14,12 +14,14 @@ use crate::world::{CardinalDir, WorldEvent, WorldState};
 #[derive(Clone)]
 pub(crate) struct DebugUIData {
     face_direction: String,
+    fps: String,
 }
 
 impl Default for DebugUIData {
     fn default() -> Self {
         Self {
-            face_direction: String::from("<UNDEFINED>"),
+            face_direction: String::from(".face_direction: <UNDEFINED>"),
+            fps: String::from(".fps: <UNDEFINED>"),
         }
     }
 }
@@ -49,6 +51,7 @@ impl DebugUI {
         |ctx: &Context, data: DebugUIData| {
             egui::CentralPanel::default().show(&ctx, |ui| {
                 ui.label(data.face_direction);
+                ui.label(data.fps);
             });
         }
     }
@@ -89,6 +92,9 @@ impl Component for DebugUI {
                     CardinalDir::UNDEFINED => { String::from("[UNDEFINED]") }
                 };
                 self.ui_data.face_direction = format!("Direction: {}", dir_name);
+            }
+            WorldEvent::DeltaTime(dur) => {
+                self.ui_data.fps = format!("FPS: {}", 1.0/dur.as_secs_f32());
             }
             _ => {}
         }
