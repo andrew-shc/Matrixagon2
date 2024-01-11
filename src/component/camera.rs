@@ -242,6 +242,9 @@ impl Component for CameraComponent {
         if dir_changed {
             new_events.push(WorldEvent::UserFaceDir(self.direction));
         }
+        if !self.translations.is_empty() {
+            new_events.push(WorldEvent::UserPosition(self.t));
+        }
 
         ComponentEventResponse(new_events, false)
     }
@@ -249,26 +252,23 @@ impl Component for CameraComponent {
     fn update_state(&mut self, _state: &mut WorldState) {
         if self.rotated || !self.translations.is_empty() {
             for key in self.translations.clone() {
-                match key {
-                    VirtualKeyCode::W => {
-                        self.move_forward(Angle::new::<si::angle::degree>(180.0));
-                    }
-                    VirtualKeyCode::A => {
-                        self.move_forward(Angle::new::<si::angle::degree>(90.0));
-                    }
-                    VirtualKeyCode::S => {
-                        self.move_forward(Angle::new::<si::angle::degree>(0.0));
-                    }
-                    VirtualKeyCode::D => {
-                        self.move_forward(Angle::new::<si::angle::degree>(270.0));
-                    }
-                    VirtualKeyCode::LShift => {
-                        self.move_vertical(-1);
-                    }
-                    VirtualKeyCode::Space => {
-                        self.move_vertical(1);
-                    }
-                    _ => {},
+                if let VirtualKeyCode::W = key {
+                    self.move_forward(Angle::new::<si::angle::degree>(180.0));
+                }
+                if let VirtualKeyCode::A = key {
+                    self.move_forward(Angle::new::<si::angle::degree>(90.0));
+                }
+                if let VirtualKeyCode::S = key {
+                    self.move_forward(Angle::new::<si::angle::degree>(0.0));
+                }
+                if let VirtualKeyCode::D = key {
+                    self.move_forward(Angle::new::<si::angle::degree>(270.0));
+                }
+                if let VirtualKeyCode::LShift = key {
+                    self.move_vertical(-1);
+                }
+                if let VirtualKeyCode::Space = key {
+                    self.move_vertical(1);
                 }
             }
 

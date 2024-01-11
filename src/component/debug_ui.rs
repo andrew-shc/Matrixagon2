@@ -5,9 +5,12 @@ use ash::{Device, vk};
 use ash::vk::{CommandPool, Queue};
 use egui::{ClippedPrimitive, Color32, ColorImage, Context, FontImage, ImageData, Mesh, RawInput, TextureFilter, TextureId};
 use egui::epaint::{ImageDelta, Primitive, Vertex};
+use uom::fmt::DisplayStyle;
+use uom::si;
 use crate::component::{Component, ComponentEventResponse, RenderData, RenderDataPurpose};
 use crate::component::terrain::CubeFaceDir;
 use crate::handler::VulkanInstance;
+use crate::measurement::blox;
 use crate::util::{cmd_recording, create_host_buffer, create_local_image};
 use crate::world::{CardinalDir, WorldEvent, WorldState};
 
@@ -16,6 +19,7 @@ use crate::world::{CardinalDir, WorldEvent, WorldState};
 pub(crate) struct DebugUIData {
     face_direction: String,
     fps: String,
+    pos: String,
 
     fps_hist: VecDeque<f32>,
 }
@@ -25,6 +29,7 @@ impl Default for DebugUIData {
         Self {
             face_direction: String::from(".face_direction: <UNDEFINED>"),
             fps: String::from(".fps: <UNDEFINED>"),
+            pos: String::from(".pos: <UNDEFINED>"),
             fps_hist: VecDeque::new(),
         }
     }
@@ -58,6 +63,7 @@ impl DebugUI {
             egui::CentralPanel::default().show(&ctx, |ui| {
                 ui.label(data.face_direction);
                 ui.label(data.fps);
+                ui.label(data.pos);
             });
         }
     }
@@ -111,6 +117,12 @@ impl Component for DebugUI {
                 let fps_avg = self.ui_data.fps_hist.iter().sum::<f32>()/self.ui_data.fps_hist.len() as f32;
 
                 self.ui_data.fps = format!("FPS: {}", fps_avg.round());
+            }
+            WorldEvent::UserPosition(pos) => {
+                self.ui_data.pos = format!("Position: {} {} {}",
+                                           pos.x.round::<blox>().into_format_args(blox, DisplayStyle::Abbreviation),
+                                           pos.y.round::<blox>().into_format_args(blox, DisplayStyle::Abbreviation),
+                                           pos.z.round::<blox>().into_format_args(blox, DisplayStyle::Abbreviation));
             }
             _ => {}
         }

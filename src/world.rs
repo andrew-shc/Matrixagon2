@@ -3,6 +3,7 @@ use std::time::Duration;
 use ash::vk;
 use winit::event::{VirtualKeyCode};
 use crate::component::{Component, RenderData};
+use crate::component::camera::Length3D;
 use crate::component::terrain::CubeFaceDir;
 use crate::debug::DebugVisibility;
 use crate::shader::Shader;
@@ -35,6 +36,9 @@ pub(crate) enum WorldEvent {
     KeyReleased(VirtualKeyCode),
     // app events
     UserFaceDir(CardinalDir),
+    UserPosition(Length3D),
+
+    // TODO: request events? to reduce constant events emission
 }
 
 #[derive(Clone, Default)]
