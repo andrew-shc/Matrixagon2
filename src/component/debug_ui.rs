@@ -276,7 +276,7 @@ impl EguiHandler {
 
                     let (buf, buf_mem, _, _) = create_host_buffer(self.vi.clone(), self.device.clone(), bytes, vk::BufferUsageFlags::TRANSFER_SRC, true);
 
-                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,);
+                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, 1, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,);
 
                     (buf, buf_mem, img, img_mem, img_extent)
                 }
@@ -301,7 +301,7 @@ impl EguiHandler {
 
                     let (buf, buf_mem, _, _) = create_host_buffer(self.vi.clone(), self.device.clone(), &bytes, vk::BufferUsageFlags::TRANSFER_SRC, true);
 
-                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,);
+                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, 1, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,);
 
                     (buf, buf_mem, img, img_mem, img_extent)
                 }

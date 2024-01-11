@@ -60,7 +60,7 @@ impl FramebufferManager {
                     let (depth_img, depth_img_mem) = create_local_image(
                         vi.clone(), device.clone(),
                         vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
-                        depth_fmt, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+                        1, depth_fmt, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
                     );
 
                     let depth_imgv_create_info = vk::ImageViewCreateInfo {
@@ -93,7 +93,7 @@ impl FramebufferManager {
                     let (color_img, color_img_mem) = create_local_image(
                         vi.clone(), device.clone(),
                         vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
-                        color_fmt, vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                        1, color_fmt, vk::ImageUsageFlags::COLOR_ATTACHMENT,
                     );
 
                     let color_imgv_create_info = vk::ImageViewCreateInfo {
@@ -127,7 +127,7 @@ impl FramebufferManager {
                     let (color_img, color_img_mem) = create_local_image(
                         vi.clone(), device.clone(),
                         vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
-                        color_fmt, vk::ImageUsageFlags::INPUT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                        1, color_fmt, vk::ImageUsageFlags::INPUT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
                     );
 
                     let color_imgv_create_info = vk::ImageViewCreateInfo {

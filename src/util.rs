@@ -94,12 +94,13 @@ pub(crate) unsafe fn cmd_recording<C: FnMut(vk::CommandBuffer) -> ()>(
 // }
 
 pub(crate) unsafe fn create_local_image(
-    vi: Rc<VulkanInstance>, device: Rc<Device>, img_extent: vk::Extent3D, format: vk::Format, usage: vk::ImageUsageFlags,
+    vi: Rc<VulkanInstance>, device: Rc<Device>, img_extent: vk::Extent3D, mip_levels: u32,
+    format: vk::Format, usage: vk::ImageUsageFlags,
 ) -> (vk::Image, vk::DeviceMemory) {
     let image_info = vk::ImageCreateInfo {
         image_type: vk::ImageType::TYPE_2D,
         extent: img_extent,
-        mip_levels: 1,
+        mip_levels,
         array_layers: 1,
         format,
         tiling: vk::ImageTiling::OPTIMAL,

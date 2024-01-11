@@ -523,4 +523,8 @@ impl VulkanInstance {
     pub(crate) unsafe fn get_physical_device_memory_properties(&self) -> vk::PhysicalDeviceMemoryProperties {
         self.inst.get_physical_device_memory_properties(self.phys_devc)
     }
+
+    pub(crate) unsafe fn get_physical_device_format_properties(&self, format: vk::Format) -> vk::FormatProperties {
+        self.inst.get_physical_device_format_properties(self.phys_devc, format)
+    }
 }
