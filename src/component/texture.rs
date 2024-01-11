@@ -24,7 +24,7 @@ pub(crate) struct TextureHandler {
 impl TextureHandler {
     pub(crate) fn new(vi: Rc<VulkanInstance>, device: Rc<Device>) -> Self {
         let decoder = png::Decoder::new(
-            fs::File::open("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/dirt.png").unwrap()
+            fs::File::open("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_side.png").unwrap()
         );
         let mut reader = decoder.read_info().unwrap();
         let mut raw_buf = vec![0; reader.output_buffer_size()];

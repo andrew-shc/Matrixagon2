@@ -39,8 +39,8 @@ fn gen_face(loc: (f32, f32, f32), ind_ofs: u32, face: CubeFaceDir) -> (Vec<Chunk
             vec![
                 ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0] },
                 ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 0.0] },
-                ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [1.0, 0.0] },
-                ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [1.0, 1.0] },
+                ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0] },
+                ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0] },
             ],
             vec![
                 0,2,1,3,1,2
@@ -48,10 +48,10 @@ fn gen_face(loc: (f32, f32, f32), ind_ofs: u32, face: CubeFaceDir) -> (Vec<Chunk
         )}
         CubeFaceDir::BACK => {(
             vec![
-                ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 0.0] },
-                ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [1.0, 0.0] },
-                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 1.0] },
-                ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [1.0, 1.0] },
+                ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0] },
+                ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [1.0, 1.0] },
+                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0] },
+                ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [1.0, 0.0] },
             ],
             vec![
                 1,0,3,2,3,0
@@ -59,10 +59,10 @@ fn gen_face(loc: (f32, f32, f32), ind_ofs: u32, face: CubeFaceDir) -> (Vec<Chunk
         )}
         CubeFaceDir::LEFT => {(
             vec![
-                ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2+0.0], uv: [0.0, 1.0] },
-                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2+0.0], uv: [0.0, 0.0] },
-                ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 0.0] },
-                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 1.0] },
+                ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0] },
+                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 0.0] },
+                ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0] },
+                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0] },
             ],
             vec![
                 2,0,3,1,3,0
@@ -70,10 +70,10 @@ fn gen_face(loc: (f32, f32, f32), ind_ofs: u32, face: CubeFaceDir) -> (Vec<Chunk
         )}
         CubeFaceDir::TOP => {(
             vec![
-                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2+0.0], uv: [0.0, 0.0] },
-                ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 0.0] },
-                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 1.0] },
-                ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [1.0, 1.0] },
+                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 1.0] },
+                ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2+0.0], uv: [0.0, 1.0] },
+                ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [1.0, 0.0] },
+                ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0] },
             ],
             vec![
                 0,1,2,3,2,1

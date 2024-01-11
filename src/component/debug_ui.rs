@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
+use std::time::Duration;
 use ash::{Device, vk};
 use ash::vk::{CommandPool, Queue};
 use egui::{ClippedPrimitive, Color32, ColorImage, Context, FontImage, ImageData, Mesh, RawInput, TextureFilter, TextureId};
@@ -15,6 +16,8 @@ use crate::world::{CardinalDir, WorldEvent, WorldState};
 pub(crate) struct DebugUIData {
     face_direction: String,
     fps: String,
+
+    fps_hist: VecDeque<f32>,
 }
 
 impl Default for DebugUIData {
@@ -22,6 +25,7 @@ impl Default for DebugUIData {
         Self {
             face_direction: String::from(".face_direction: <UNDEFINED>"),
             fps: String::from(".fps: <UNDEFINED>"),
+            fps_hist: VecDeque::new(),
         }
     }
 }
@@ -33,6 +37,8 @@ pub(crate) struct DebugUI {
 }
 
 impl DebugUI {
+    const FPS_SAMPLES: usize = 200;
+
     pub(crate) fn new(vi: Rc<VulkanInstance>, device: Rc<Device>, init_raw_input: RawInput) -> Self {
         let mut s = Self {
             ui_handler: EguiHandler::new(vi.clone(), device.clone(), init_raw_input),
@@ -94,7 +100,17 @@ impl Component for DebugUI {
                 self.ui_data.face_direction = format!("Direction: {}", dir_name);
             }
             WorldEvent::DeltaTime(dur) => {
-                self.ui_data.fps = format!("FPS: {}", 1.0/dur.as_secs_f32());
+                let sample = 1.0/dur.as_secs_f32();
+                if self.ui_data.fps_hist.len() < Self::FPS_SAMPLES {
+                    self.ui_data.fps_hist.push_back(sample);
+                } else {
+                    self.ui_data.fps_hist.push_back(sample);
+                    self.ui_data.fps_hist.pop_front();
+                }
+
+                let fps_avg = self.ui_data.fps_hist.iter().sum::<f32>()/self.ui_data.fps_hist.len() as f32;
+
+                self.ui_data.fps = format!("FPS: {}", fps_avg.round());
             }
             _ => {}
         }
