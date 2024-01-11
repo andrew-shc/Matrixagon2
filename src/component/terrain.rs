@@ -215,9 +215,9 @@ impl Terrain {
                                         }
                                     };
 
-                                    local_checked_gen_face( 0, 0, 1, CubeFaceDir::FRONT);
+                                    local_checked_gen_face( 0, 0, -1, CubeFaceDir::FRONT);
                                     local_checked_gen_face( 1, 0, 0, CubeFaceDir::RIGHT);
-                                    local_checked_gen_face( 0, 0,-1, CubeFaceDir::BACK);
+                                    local_checked_gen_face( 0, 0,1, CubeFaceDir::BACK);
                                     local_checked_gen_face(-1, 0, 0, CubeFaceDir::LEFT);
                                     local_checked_gen_face( 0, 1, 0, CubeFaceDir::TOP);
                                     local_checked_gen_face( 0,-1, 0, CubeFaceDir::BOTTOM);
