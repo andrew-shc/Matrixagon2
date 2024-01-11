@@ -120,7 +120,7 @@ impl CameraComponent {
         let mod_angle = Angle::new::<si::angle::radian>(
             angle.value.rem_euclid(Angle::new::<si::angle::degree>(360.0).value)
         );
-        println!("ANGLE {:?}", mod_angle.into_format_args(si::angle::degree, DisplayStyle::Abbreviation));
+
         if Angle::new::<si::angle::degree>(360.0-45.0) < mod_angle || mod_angle <= Angle::new::<si::angle::degree>(0.0+45.0) {
             // because this is at a point where the modulo jumps back to 0 and we assume the max will
             // always be 360.0deg, so we just use ||
