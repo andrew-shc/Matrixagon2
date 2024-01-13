@@ -8,7 +8,7 @@ use egui::epaint::{ImageDelta, Primitive, Vertex};
 use uom::fmt::DisplayStyle;
 use uom::si;
 use crate::component::{Component, ComponentEventResponse, RenderData, RenderDataPurpose};
-use crate::component::terrain::CubeFaceDir;
+use crate::component::terrain::FaceDir;
 use crate::handler::VulkanInstance;
 use crate::measurement::blox;
 use crate::util::{cmd_recording, create_host_buffer, create_local_image};

@@ -280,6 +280,7 @@ impl Shader for ChunkRasterizer {
     fn recreate_buffer(&mut self, render_data: RenderData) {
         match render_data {
             RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainVertices) => unsafe {
+                println!("RECREATE VERTEX BUFFER");
                 if let Some((old_buf, old_mem)) = self.terrain_vbo {
                     self.device.device_wait_idle().unwrap();
                     self.device.destroy_buffer(old_buf, None);
@@ -288,6 +289,7 @@ impl Shader for ChunkRasterizer {
                 self.terrain_vbo = Some((buf, mem));
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainVertices) => unsafe {
+                println!("RECREATE INDEX BUFFER");
                 if let Some((old_buf, old_mem, _)) = self.terrain_ibo {
                     self.device.device_wait_idle().unwrap();
                     self.device.destroy_buffer(old_buf, None);

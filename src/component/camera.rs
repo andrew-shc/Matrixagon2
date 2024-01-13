@@ -14,7 +14,7 @@ use crate::measurement::blox;
 use crate::util::{create_host_buffer, matrix_ident, update_buffer};
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) struct Length3D {
     pub(crate) x: Length, pub(crate) y: Length, pub(crate) z: Length,
 }

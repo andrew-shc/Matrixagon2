@@ -4,7 +4,7 @@ use ash::vk;
 use winit::event::{VirtualKeyCode};
 use crate::component::{Component, RenderData};
 use crate::component::camera::Length3D;
-use crate::component::terrain::CubeFaceDir;
+use crate::component::terrain::FaceDir;
 use crate::debug::DebugVisibility;
 use crate::shader::Shader;
 
@@ -18,7 +18,7 @@ pub(crate) enum CardinalDir {
     UNDEFINED,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) enum WorldEvent {
     // general sync events
     Tick,
@@ -95,7 +95,7 @@ impl World {
         for component in &mut self.components {
             // any events to be removed before next component
             for world_event in &self.events {
-                let mut event_resp = component.respond_event(*world_event);
+                let mut event_resp = component.respond_event(*world_event);  // TODO: rework the world system to consume any amount of event, but return event once (do we really need the world state?)
                 self.events_buffer.append(&mut event_resp.0);
             }
             // world states
