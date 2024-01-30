@@ -1,18 +1,15 @@
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
-use std::time::Duration;
 use ash::{Device, vk};
 use ash::vk::{CommandPool, Queue};
-use egui::{ClippedPrimitive, Color32, ColorImage, Context, FontImage, ImageData, Mesh, RawInput, TextureFilter, TextureId};
+use egui::{ClippedPrimitive, Context, ImageData, Mesh, RawInput, TextureFilter, TextureId};
 use egui::epaint::{ImageDelta, Primitive, Vertex};
 use uom::fmt::DisplayStyle;
-use uom::si;
-use crate::component::{Component, ComponentEventResponse, RenderData, RenderDataPurpose};
-use crate::component::terrain::FaceDir;
+use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::handler::VulkanInstance;
 use crate::measurement::blox;
 use crate::util::{cmd_recording, create_host_buffer, create_local_image};
-use crate::world::{CardinalDir, WorldEvent, WorldState};
+use crate::world::{CardinalDir, WorldEvent};
 
 
 #[derive(Clone)]
@@ -93,7 +90,7 @@ impl Component for DebugUI {
         ]
     }
 
-    fn respond_event(&mut self, event: WorldEvent) -> ComponentEventResponse {
+    fn respond_event(&mut self, event: WorldEvent) -> Vec<WorldEvent> {
         match event {
             WorldEvent::UserFaceDir(new_dir) => {
                 let dir_name = match new_dir {
@@ -130,10 +127,10 @@ impl Component for DebugUI {
         // TODO: for creating raw input
         // self.ui_handler.modify_raw_input(event);
 
-        ComponentEventResponse::default()
+        vec![]
     }
 
-    fn update_state(&mut self, state: &mut WorldState) {
+    fn update(&mut self) {
         unsafe { self.render_data = self.ui_handler.display(self.ui_data.clone(), Self::ui_program()); }
     }
 
@@ -162,7 +159,7 @@ impl Component for DebugUI {
             .collect::<Vec<RenderData>>()
     }
 
-    unsafe fn destroy_descriptor(&mut self) {
+    unsafe fn destroy(&mut self) {
         self.ui_handler.destroy();
     }
 }
@@ -203,9 +200,9 @@ impl EguiHandler {
         }
     }
 
-    fn modify_raw_input(&mut self, event: WorldEvent) {
-
-    }
+    // fn modify_raw_input(&mut self, event: WorldEvent) {
+    //
+    // }
 
     unsafe fn display(&mut self, data: DebugUIData, cb: impl FnOnce(&Context, DebugUIData)) -> Vec<(Vec<Vertex>, Vec<u32>, vk::Rect2D, TextureId)> {
         // TODO: aggregate all the events here and create raw input only in here
@@ -288,7 +285,7 @@ impl EguiHandler {
 
                     let (buf, buf_mem, _, _) = create_host_buffer(self.vi.clone(), self.device.clone(), bytes, vk::BufferUsageFlags::TRANSFER_SRC, true);
 
-                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, 1, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,);
+                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, 1, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED, None);
 
                     (buf, buf_mem, img, img_mem, img_extent)
                 }
@@ -300,11 +297,11 @@ impl EguiHandler {
                         .map(|col| {
                             col.to_srgba_unmultiplied()
                         })
-                        .fold(Vec::new(), |mut b, mut next| {
+                        .fold(Vec::new(), |mut b, next| {
                             b.extend_from_slice(&next);
                             b
                         });
-                    ;
+
                     let img_extent = vk::Extent3D {
                         width: font.width() as u32,
                         height: font.height() as u32,
@@ -313,7 +310,7 @@ impl EguiHandler {
 
                     let (buf, buf_mem, _, _) = create_host_buffer(self.vi.clone(), self.device.clone(), &bytes, vk::BufferUsageFlags::TRANSFER_SRC, true);
 
-                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, 1, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,);
+                    let (img, img_mem) = create_local_image(self.vi.clone(), self.device.clone(), img_extent, 1, vk::Format::R8G8B8A8_SRGB, vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED, None);
 
                     (buf, buf_mem, img, img_mem, img_extent)
                 }
@@ -415,7 +412,7 @@ impl EguiHandler {
     }
 
     unsafe fn create_img_views(&mut self) {
-        for (_, mut txtr) in &mut self.textures {
+        for (_, txtr) in &mut self.textures {
             let img_view_info = vk::ImageViewCreateInfo {
                 image: txtr.local_img,
                 view_type: vk::ImageViewType::TYPE_2D,

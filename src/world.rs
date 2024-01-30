@@ -4,7 +4,7 @@ use ash::vk;
 use winit::event::{VirtualKeyCode};
 use crate::component::{Component, RenderData};
 use crate::component::camera::Length3D;
-use crate::component::terrain::FaceDir;
+use crate::component::texture::TextureIDMapper;
 use crate::debug::DebugVisibility;
 use crate::shader::Shader;
 
@@ -18,12 +18,14 @@ pub(crate) enum CardinalDir {
     UNDEFINED,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum WorldEvent {
     // general sync events
     Tick,
     Start,
     DeltaTime(Duration),
+    // resources
+    NewTextureMapper(TextureIDMapper),
     // window events
     LeftButtonPressed,
     LeftButtonReleased,
@@ -41,18 +43,11 @@ pub(crate) enum WorldEvent {
     // TODO: request events? to reduce constant events emission
 }
 
-#[derive(Clone, Default)]
-pub struct WorldState {
-
-}
-
 pub(crate) struct World {
     dbgv: DebugVisibility,
     components: Vec<Box<dyn Component>>,
     events: Vec<WorldEvent>,  // assumes all WorldEvent enums are unique
     events_buffer: Vec<WorldEvent>,
-    persistent_state: WorldState,
-    persistent_state_buffer: WorldState,
 }
 
 impl World {
@@ -62,8 +57,6 @@ impl World {
             components,
             events: vec![WorldEvent::Start],
             events_buffer: Vec::new(),
-            persistent_state: WorldState::default(),
-            persistent_state_buffer: WorldState::default(),
         }
     }
 
@@ -79,7 +72,7 @@ impl World {
 
     pub(crate) unsafe fn destroy_descriptors(&mut self) {
         for component in &mut self.components {
-            component.destroy_descriptor();
+            component.destroy();
         }
     }
 
@@ -87,25 +80,15 @@ impl World {
         self.events_buffer.push(e);
     }
 
-    // TODO: make new events from component return from the consistent update() method instead of read events
     pub(crate) fn update(&mut self) {
-
-        let mut new_states = Vec::with_capacity(self.components.len());
-
-        for component in &mut self.components {
+        for mut component in &mut self.components {
             // any events to be removed before next component
-            for world_event in &self.events {
-                let mut event_resp = component.respond_event(*world_event);  // TODO: rework the world system to consume any amount of event, but return event once (do we really need the world state?)
-                self.events_buffer.append(&mut event_resp.0);
+            for world_event in &mut self.events {
+                let mut event_resp = component.respond_event(world_event.clone());
+                self.events_buffer.append(&mut event_resp);
             }
-            // world states
-            let mut new_state = self.persistent_state.clone();
-            component.update_state(&mut new_state);
-            new_states.push(new_state);
+            component.update();
         }
-
-        // TODO: currently modification of world state does not modify the whole state
-        // TODO: implement states diffing (making sure components handle all writing collision)
 
         self.events.clear();
         mem::swap(&mut self.events, &mut self.events_buffer);

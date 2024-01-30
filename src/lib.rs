@@ -19,17 +19,17 @@
 #[macro_use]
 extern crate uom;
 
-use std::collections::HashMap;
+use std::path::Path;
 use std::time::Instant;
 use ash::vk;
-use egui::{Context, Id, Modifiers, Pos2, RawInput, Rect, ViewportId, ViewportIdMap, ViewportInfo};
+use egui::{Id, Modifiers, Pos2, RawInput, Rect, ViewportId, ViewportIdMap, ViewportInfo};
 use egui::ahash::HashMapExt;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window, WindowBuilder};
 use crate::component::camera::CameraComponent;
-use crate::component::debug_ui::{DebugUI, DebugUIData};
+use crate::component::debug_ui::{DebugUI};
 use crate::debug::DebugVisibility;
 use crate::handler::VulkanHandler;
 use crate::world::{World, WorldEvent};
@@ -68,17 +68,6 @@ pub struct MatrixagonApp {
 
 impl MatrixagonApp {
     pub fn init(validate: bool, debug_visibility: DebugVisibility, fullscreen: bool, mouse_lock: bool) -> MatrixagonApp {
-        /*
-        - Window Management [app itself]
-        - Camera [as a component]
-        - Initial components (default + user-defined) [defined in creating world]
-        - Descriptors [among the components]
-        - World [created in the app]
-        - ChunkMesh & UIMesh [created in necessary components to handle spatial data discretely]
-        - Shader [TODO: ??? needs vulkan instance, yet the world needs shader to render and accept data]
-        - VulkanHandler [created at the end to provide the render context]
-         */
-
         let prsnt_inp = true;
 
         let initial_extent = if fullscreen {
@@ -159,7 +148,14 @@ impl MatrixagonApp {
                 handler.vi.clone(), handler.device.clone(), ratio, 70.0, 0.01, 0.05
             )),
             Box::new(Terrain::new(handler.vi.clone(), handler.device.clone())),
-            Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone())),
+            Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone(), vec![
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/null.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/stone.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_top.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_side.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/dirt.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/sand.png"),
+            ])),
             Box::new(DebugUI::new(handler.vi.clone(), handler.device.clone(), init_raw_input)),
         ]);
 
@@ -192,7 +188,7 @@ impl MatrixagonApp {
         }
     }
 
-    pub fn run(mut self) {
+    pub fn run(self) {
         // guarantees to move the entire struct, instead of partially moving due to the nature
         // of this closure
         let mut app = self;

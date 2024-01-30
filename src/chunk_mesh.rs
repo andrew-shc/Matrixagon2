@@ -1,9 +1,20 @@
 use std::collections::HashMap;
-use uom::fmt::DisplayStyle;
 use uom::si::f32::Length;
-use crate::component::camera::{Rotation, Length3D};
-use crate::component::terrain::{BlockGen, FaceDir};
+use crate::component::camera::{Length3D};
 use crate::measurement::chux;
+
+
+
+// pub(crate) type ChunkGen<P> = Box<dyn Fn(Length3D, Length3D) -> Box<[P]>>;
+// pub(crate) type MeshGen<P, V, I> = Box<dyn Fn(&HashMap<ChunkPosition, Chunk<P>>) -> (Vec<V>, Vec<I>)>;
+
+pub(crate) trait ChunkGeneratable {
+    type P;
+    type V;
+    type I;
+    fn generate_chunk(&self, pos: Length3D) -> Box<[Self::P]>;
+    fn generate_mesh(&self, chunks: &HashMap<ChunkPosition, Chunk<Self::P>>) -> (Vec<Self::V>, Vec<Self::I>);
+}
 
 
 #[derive(Copy, Clone, Default)]
@@ -40,32 +51,27 @@ impl ChunkPosition {
     fn back(self) -> Self { Self { x: self.x, y: self.y, z: self.z-1 } }
 }
 
-pub(crate) struct ChunkMesh<P, V, I> {
+pub(crate) struct ChunkMesh<G: ChunkGeneratable> {
     pub(crate) central_pos: Length3D,
     chunk_size: Length3D,
     chunk_radius: i32,
 
-    chunk_generator: Box<dyn Fn(Length3D, Length3D) -> Box<[P]>>,
+    generator: G,
     // chunks: Vec<Chunk<P>>,
     // chunk_adjacency: Vec<ChunkAdjaceny>,
-    chunks: HashMap<ChunkPosition, Chunk<P>>,
+    chunks: HashMap<ChunkPosition, Chunk<G::P>>,
     chunk_adjacency: Vec<ChunkAdjacency>,
-    vertex_generator: Box<dyn Fn(&HashMap<ChunkPosition, Chunk<P>>) -> (Vec<V>, Vec<I>)>,
 }
 
-impl<P, V, I> ChunkMesh<P, V, I> {
-    pub(crate) fn new(pos: Length3D, size: Length3D, chunk_radius: u32,
-                      chunk_generator: Box<dyn Fn(Length3D, Length3D) -> Box<[P]>>,
-                      vertex_generator: Box<dyn Fn(&HashMap<ChunkPosition, Chunk<P>>) -> (Vec<V>, Vec<I>)>
-    ) -> Self {
+impl<G: ChunkGeneratable> ChunkMesh<G> {
+    pub(crate) fn new(pos: Length3D, size: Length3D, chunk_radius: u32, generator: G) -> Self {
         Self {
             central_pos: pos,
             chunk_size: size,
             chunk_radius: chunk_radius as i32,
-            chunk_generator,
+            generator,
             chunks: HashMap::new(),
             chunk_adjacency: Vec::new(),
-            vertex_generator,
         }
     }
 
@@ -84,34 +90,38 @@ impl<P, V, I> ChunkMesh<P, V, I> {
         }
     }
 
+    pub(crate) fn swap_generator(&mut self, generator: G) {
+        self.generator = generator;
+    }
+
     pub(crate) fn update(&mut self, pos: Length3D) -> bool {
         let mut pos_changed = false;
         let mut chunk_changed = false;
 
         if pos.x.floor::<chux>() < self.central_pos.x-Length::new::<chux>(1.0) {
-            println!("NEW CHUNK LOAD -X");
+            // println!("NEW CHUNK LOAD -X");
             self.central_pos.x -= Length::new::<chux>(1.0);
             pos_changed = true;
         } else if self.central_pos.x < pos.x.floor::<chux>() {
-            println!("NEW CHUNK LOAD +X");
+            // println!("NEW CHUNK LOAD +X");
             self.central_pos.x += Length::new::<chux>(1.0);
             pos_changed = true;
         }
         if pos.y.floor::<chux>() < self.central_pos.y-Length::new::<chux>(1.0) {
-            println!("NEW CHUNK LOAD -Y");
+            // println!("NEW CHUNK LOAD -Y");
             self.central_pos.y -= Length::new::<chux>(1.0);
             pos_changed = true;
         } else if self.central_pos.y < pos.y.floor::<chux>() {
-            println!("NEW CHUNK LOAD +Y");
+            // println!("NEW CHUNK LOAD +Y");
             self.central_pos.y += Length::new::<chux>(1.0);
             pos_changed = true;
         }
         if pos.z.floor::<chux>() < self.central_pos.z-Length::new::<chux>(1.0) {
-            println!("NEW CHUNK LOAD -Z");
+            // println!("NEW CHUNK LOAD -Z");
             self.central_pos.z -= Length::new::<chux>(1.0);
             pos_changed = true;
         } else if self.central_pos.z < pos.z.floor::<chux>() {
-            println!("NEW CHUNK LOAD +Z");
+            // println!("NEW CHUNK LOAD +Z");
             self.central_pos.z += Length::new::<chux>(1.0);
             pos_changed = true;
         }
@@ -127,37 +137,17 @@ impl<P, V, I> ChunkMesh<P, V, I> {
                             Length::new::<chux>(cz as f32)+self.central_pos.z,
                         );
 
-                        // let mut chunk_exists = false;
-                        // for chunk in &self.chunks {
-                        //     // f chunk.pos.x.get::<chux>().floor() != new_chunk_pos.x.get::<chux>().floor() ||
-                        //     //     chunk.pos.y.get::<chux>().floor() != new_chunk_pos.y.get::<chux>().floor() ||
-                        //     //     chunk.pos.z.get::<chux>().floor() != new_chunk_pos.z.get::<chux>().floor() {
-                        //     if chunk.pos.x == new_chunk_pos.x &&
-                        //         chunk.pos.y == new_chunk_pos.y &&
-                        //         chunk.pos.z == new_chunk_pos.z {
-                        //         chunk_exists = true;
-                        //     }
-                        // }
                         if let None = self.chunks.get(&ChunkPosition::from(new_chunk_pos)) {
                             // chunk at new_chunk_pos does not exist (needs to be created)
 
-                            println!("New chunk loaded [{} {} {}]",
-                                     new_chunk_pos.x.into_format_args(chux, DisplayStyle::Abbreviation),
-                                     new_chunk_pos.y.into_format_args(chux, DisplayStyle::Abbreviation),
-                                     new_chunk_pos.z.into_format_args(chux, DisplayStyle::Abbreviation),
-                            );
+                            // println!("New chunk loaded [{} {} {}]",
+                            //          new_chunk_pos.x.into_format_args(chux, DisplayStyle::Abbreviation),
+                            //          new_chunk_pos.y.into_format_args(chux, DisplayStyle::Abbreviation),
+                            //          new_chunk_pos.z.into_format_args(chux, DisplayStyle::Abbreviation),
+                            // );
                             self.load_chunk(new_chunk_pos);
                             chunk_changed = true;
                         }
-                        // if !chunk_exists {
-                        //     println!("New chunk loaded [{} {} {}]",
-                        //              new_chunk_pos.x.into_format_args(chux, DisplayStyle::Abbreviation),
-                        //              new_chunk_pos.y.into_format_args(chux, DisplayStyle::Abbreviation),
-                        //              new_chunk_pos.z.into_format_args(chux, DisplayStyle::Abbreviation),
-                        //     );
-                        //     self.load_chunk(new_chunk_pos);
-                        //     chunk_changed = true;
-                        // }
                     }
                 }
             }
@@ -170,7 +160,7 @@ impl<P, V, I> ChunkMesh<P, V, I> {
 
     fn load_chunk(&mut self, pos: Length3D) {
         let hash_pos = ChunkPosition::from(pos);
-        println!("LOAD CHUNK / HASH POS {:?}", hash_pos);
+        // println!("LOAD CHUNK / HASH POS {:?}", hash_pos);
 
         let mut adj = ChunkAdjacency::default();
         if let Some(c) = self.chunks.get_mut(&hash_pos.top()) {
@@ -199,7 +189,7 @@ impl<P, V, I> ChunkMesh<P, V, I> {
         }
 
         self.chunks.insert(
-            hash_pos, Chunk::new(pos, hash_pos, (self.chunk_generator)(pos, self.chunk_size), adj)
+            hash_pos, Chunk::new(pos, hash_pos, self.generator.generate_chunk(pos), adj)
         );
     }
 
@@ -208,8 +198,8 @@ impl<P, V, I> ChunkMesh<P, V, I> {
     }
 
     // generate the entire aggregated vertices/indices
-    pub(crate) fn generate_vertices(&mut self) -> (Vec<V>, Vec<I>) {
-        (self.vertex_generator)(&self.chunks)
+    pub(crate) fn generate_vertices(&mut self) -> (Vec<G::V>, Vec<G::I>) {
+        self.generator.generate_mesh(&self.chunks)
     }
 }
 

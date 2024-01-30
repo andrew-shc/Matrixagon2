@@ -1,15 +1,14 @@
 use std::rc::Rc;
 use ash::{Device, vk};
 use winit::event::VirtualKeyCode;
-use crate::component::{Component, ComponentEventResponse, RenderData, RenderDataPurpose};
+use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::handler::VulkanInstance;
 use crate::util::{Mat4, matrix_prod};
-use crate::world::{CardinalDir, WorldEvent, WorldState};
+use crate::world::{CardinalDir, WorldEvent};
 use std::{ffi, mem};
-use uom::{si, unit};
-use uom::fmt::DisplayStyle;
+use uom::{si};
 use uom::num_traits::Zero;
-use uom::si::f32::{Angle, Length, Ratio};
+use uom::si::f32::{Angle, Length};
 use crate::measurement::blox;
 use crate::util::{create_host_buffer, matrix_ident, update_buffer};
 
@@ -72,7 +71,7 @@ pub(crate) struct CameraComponent {
 impl CameraComponent {
     pub(crate) fn new(vi: Rc<VulkanInstance>, device: Rc<Device>,
                       aspect_ratio: f32, fov: f32, trans_speed: f32, rot_speed: f32) -> CameraComponent {
-        let init_rot = (180.0f32).to_radians();
+        // let init_rot = (180.0f32).to_radians();
         CameraComponent {
             descriptor: unsafe { CameraDescriptor::new(vi.clone(), device.clone()) },
             trans_speed, rot_speed, t: Length3D::default(), r: Rotation::default(),
@@ -198,7 +197,7 @@ impl Component for CameraComponent {
         Vec::new()
     }
 
-    fn respond_event(&mut self, event: WorldEvent) -> ComponentEventResponse {
+    fn respond_event(&mut self, event: WorldEvent) -> Vec<WorldEvent> {
         let mut dir_changed = false;
         match event {
             WorldEvent::MouseMotion((x, y)) => {
@@ -246,10 +245,10 @@ impl Component for CameraComponent {
             new_events.push(WorldEvent::UserPosition(self.t));
         }
 
-        ComponentEventResponse(new_events, false)
+        new_events
     }
 
-    fn update_state(&mut self, _state: &mut WorldState) {
+    fn update(&mut self) {
         if self.rotated || !self.translations.is_empty() {
             for key in self.translations.clone() {
                 if let VirtualKeyCode::W = key {
@@ -294,7 +293,7 @@ impl Component for CameraComponent {
         )]
     }
 
-    unsafe fn destroy_descriptor(&mut self) {
+    unsafe fn destroy(&mut self) {
         self.descriptor.destroy();
     }
 }

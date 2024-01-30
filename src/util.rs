@@ -1,7 +1,6 @@
 use std::{ffi, mem};
 use std::rc::Rc;
 use ash::{Device, vk};
-use crate::debug::DebugVisibility;
 use crate::handler::VulkanInstance;
 
 // column major
@@ -95,13 +94,13 @@ pub(crate) unsafe fn cmd_recording<C: FnMut(vk::CommandBuffer) -> ()>(
 
 pub(crate) unsafe fn create_local_image(
     vi: Rc<VulkanInstance>, device: Rc<Device>, img_extent: vk::Extent3D, mip_levels: u32,
-    format: vk::Format, usage: vk::ImageUsageFlags,
+    format: vk::Format, usage: vk::ImageUsageFlags, layers: Option<u32>,
 ) -> (vk::Image, vk::DeviceMemory) {
     let image_info = vk::ImageCreateInfo {
         image_type: vk::ImageType::TYPE_2D,
         extent: img_extent,
         mip_levels,
-        array_layers: 1,
+        array_layers: if let Some(layers) = layers {layers} else {1},
         format,
         tiling: vk::ImageTiling::OPTIMAL,
         initial_layout: vk::ImageLayout::UNDEFINED,

@@ -3,7 +3,7 @@ use std::ffi::{c_char, CStr};
 use std::os::raw::c_void;
 use std::rc::Rc;
 use ash::extensions::ext::DebugUtils;
-use ash::extensions::khr::{Surface, Swapchain};
+use ash::extensions::khr::{Surface};
 use ash::{Device, Instance, vk};
 use ash_window::create_surface;
 use winit::event_loop::EventLoop;
@@ -241,7 +241,7 @@ impl VulkanHandler {
     }
 
     pub(crate) unsafe fn draw_frame(&mut self) {
-        let mut swapchain = self.swapchain.as_mut()
+        let swapchain = self.swapchain.as_mut()
             .expect("Attempted to draw frame when swapchain has not initialized yet!");
 
         self.device.wait_for_fences(&[self.sync.in_flight_fence], true, u64::MAX).unwrap();

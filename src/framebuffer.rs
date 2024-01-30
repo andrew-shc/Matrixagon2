@@ -3,7 +3,6 @@ use ash::{Device, vk};
 use crate::component::{RenderData, RenderDataPurpose};
 use crate::debug::DebugVisibility;
 use crate::handler::VulkanInstance;
-use crate::swapchain::SwapchainManager;
 use crate::util::create_local_image;
 
 
@@ -60,7 +59,7 @@ impl FramebufferManager {
                     let (depth_img, depth_img_mem) = create_local_image(
                         vi.clone(), device.clone(),
                         vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
-                        1, depth_fmt, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+                        1, depth_fmt, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT, None
                     );
 
                     let depth_imgv_create_info = vk::ImageViewCreateInfo {
@@ -93,7 +92,7 @@ impl FramebufferManager {
                     let (color_img, color_img_mem) = create_local_image(
                         vi.clone(), device.clone(),
                         vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
-                        1, color_fmt, vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                        1, color_fmt, vk::ImageUsageFlags::COLOR_ATTACHMENT, None
                     );
 
                     let color_imgv_create_info = vk::ImageViewCreateInfo {
@@ -128,6 +127,7 @@ impl FramebufferManager {
                         vi.clone(), device.clone(),
                         vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
                         1, color_fmt, vk::ImageUsageFlags::INPUT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                        None
                     );
 
                     let color_imgv_create_info = vk::ImageViewCreateInfo {

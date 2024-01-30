@@ -7,9 +7,8 @@ use std::{fs, mem, process};
 use std::rc::Rc;
 use ash::{Device, vk};
 use ash::util::read_spv;
-use crate::component::{RenderData, RenderDataPurpose};
+use crate::component::{RenderData};
 use crate::framebuffer::AttachmentRef;
-use crate::shader::chunk::ChunkVertex;
 
 pub trait Shader {
     fn renderpass(&self) -> vk::RenderPass;

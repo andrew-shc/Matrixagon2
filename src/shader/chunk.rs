@@ -3,14 +3,15 @@ use std::rc::Rc;
 use ash::{Device, vk};
 use crate::component::{RenderData, RenderDataPurpose};
 use crate::framebuffer::AttachmentRef;
-use crate::{get_vertex_inp, offset_of};
-use crate::shader::{DescriptorManager, destroy_shader_modules, gen_shader_modules_info, get_vertex_inp, Shader};
+use crate::{get_vertex_inp};
+use crate::shader::{DescriptorManager, destroy_shader_modules, gen_shader_modules_info, Shader};
 use crate::shader::debug_ui::DebugUISubShader;
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct ChunkVertex {
     pub(crate) pos: [f32; 3],
     pub(crate) uv: [f32; 2],
+    pub(crate) txtr: f32,
 }
 
 
@@ -31,12 +32,12 @@ pub struct ChunkRasterizer {
 impl ChunkRasterizer {
     pub(crate) unsafe fn new(device: Rc<Device>, extent: vk::Extent2D, color_format: vk::Format,
                              depth_format: vk::Format) -> Self {
-        let mut descriptor = DescriptorManager::new(device.clone(), vec![
+        let descriptor = DescriptorManager::new(device.clone(), vec![
             vec![  // set 0 for shader
                 (vk::DescriptorType::UNIFORM_BUFFER, vk::ShaderStageFlags::VERTEX),  // proj-view
                 (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT),  // textures
             ],
-            vec![  // TODO: set 1 for ui
+            vec![  // set 1 for ui
                 (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT), // egui debug ui texture
                 (vk::DescriptorType::INPUT_ATTACHMENT, vk::ShaderStageFlags::FRAGMENT), // input attachment from previous
             ],
@@ -52,7 +53,8 @@ impl ChunkRasterizer {
 
         let vertex_inp_info = get_vertex_inp!(ChunkVertex;
             (vk::Format::R32G32B32_SFLOAT, pos),
-            (vk::Format::R32G32_SFLOAT, uv)
+            (vk::Format::R32G32_SFLOAT, uv),
+            (vk::Format::R32_SFLOAT, txtr)
         );
 
         let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];

@@ -4,7 +4,7 @@ pub mod texture;
 pub mod debug_ui;
 
 use ash::vk;
-use crate::world::{WorldEvent, WorldState};
+use crate::world::{WorldEvent};
 
 
 // can be modified for new render purposes beyond simple camera and terrain
@@ -42,11 +42,11 @@ pub trait Component {
     // Renderable
     fn render(&self) -> Vec<RenderData>;
     // Interactable
-    fn respond_event(&mut self, event: WorldEvent) -> ComponentEventResponse;  // emits new event(s)
-    fn update_state(&mut self, state: &mut WorldState);  // modifies the buffered world state (per component)
+    fn respond_event(&mut self, event: WorldEvent) -> Vec<WorldEvent>;  // emits new event(s)
+    fn update(&mut self);
     // Descriptable
-    unsafe fn load_descriptors(&mut self, cmd_pool: vk::CommandPool, queue: vk::Queue) -> Vec<RenderData> {Vec::new()}
-    unsafe fn destroy_descriptor(&mut self) {}
+    unsafe fn load_descriptors(&mut self, _: vk::CommandPool, _: vk::Queue) -> Vec<RenderData> {Vec::new()}
+    unsafe fn destroy(&mut self) {}
 }
 
 // TODO: remove

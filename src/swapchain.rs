@@ -1,7 +1,6 @@
 use std::rc::Rc;
 use ash::{Device, vk};
 use ash::extensions::khr::Swapchain;
-use crate::component::RenderData;
 use crate::debug::DebugVisibility;
 use crate::framebuffer::{AttachmentRef, FramebufferManager};
 use crate::handler::VulkanInstance;

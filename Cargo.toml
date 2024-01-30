@@ -13,3 +13,4 @@ raw-window-handle = "0.5.2"
 png = { version = "0.17.10", features = [] }
 uom = "0.35.0"
 egui = { version = "0.24.1", features = ["bytemuck"] }
+noise = "0.8.2"

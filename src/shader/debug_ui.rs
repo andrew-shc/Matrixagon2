@@ -3,9 +3,8 @@ use std::rc::Rc;
 use ash::{Device, vk};
 use egui::epaint::Vertex;
 use crate::component::RenderData;
-use crate::{get_vertex_inp, offset_of};
-use crate::shader::chunk::ChunkVertex;
-use crate::shader::{DescriptorManager, gen_shader_modules_info, get_vertex_inp, Shader};
+use crate::{get_vertex_inp};
+use crate::shader::{DescriptorManager, gen_shader_modules_info};
 
 
 // fn vertex_inp() -> vk::PipelineVertexInputStateCreateInfo {
