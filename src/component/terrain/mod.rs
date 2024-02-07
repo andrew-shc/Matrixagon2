@@ -2,16 +2,16 @@ mod block_gen;
 
 use std::rc::Rc;
 use ash::{Device, vk};
-use noise::{NoiseFn};
+use noise::NoiseFn;
 use uom::si::f32::Length;
-use crate::chunk_mesh::{ChunkMesh};
-use crate::component::{Component, RenderData, RenderDataPurpose};
+use crate::chunk_mesh::ChunkMesh;
+use crate::component::{Component, RenderData};
 use crate::component::camera::Length3D;
 use crate::component::terrain::block_gen::BlockGenerator;
 use crate::handler::VulkanInstance;
 use crate::measurement::{blox, chux};
-use crate::util::create_host_buffer;
-use crate::world::{WorldEvent};
+use crate::util::{CmdBufContext, create_host_buffer, create_local_buffer};
+use crate::world::WorldEvent;
 
 
 #[derive(Copy, Clone)]
@@ -114,6 +114,7 @@ pub enum BlockCullType {
 pub(crate) struct Terrain<'b> {
     vi: Rc<VulkanInstance>,
     device: Rc<Device>,
+    ctx: CmdBufContext,
 
     block_ind: Vec<BlockData<'b>>,
 
@@ -125,12 +126,11 @@ pub(crate) struct Terrain<'b> {
 }
 
 impl<'b> Terrain<'b> {
-    pub(crate) fn new(vi: Rc<VulkanInstance>, device: Rc<Device>, block_ind: Vec<BlockData<'b>>) -> Self {
+    pub(crate) fn new(vi: Rc<VulkanInstance>, device: Rc<Device>, ctx: CmdBufContext, block_ind: Vec<BlockData<'b>>) -> Self {
         let chunk_size = Length::new::<chux>(1.0).get::<blox>() as u32;
 
         Self {
-            vi,
-            device,
+            vi, device, ctx: ctx.clone(),
             block_ind,
             chunk_mesh: None,
             to_render: vec![],
@@ -188,19 +188,39 @@ impl Component for Terrain<'static> {
         if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh {
             if self.chunk_update {
                 for (verts, inds, purpose) in chunk_mesh.generate_vertices() {
-                    let (vertex_buffer, vertex_buffer_mem, _, _) = unsafe {
-                        create_host_buffer(self.vi.clone(), self.device.clone(), &verts, vk::BufferUsageFlags::VERTEX_BUFFER, true)
+                    let (host_vbo, host_vmo, _, host_vbo_size) = unsafe {
+                        create_host_buffer(self.vi.clone(), self.device.clone(), &verts, vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::VERTEX_BUFFER, true)
                     };
-                    let (index_buffer, index_buffer_mem, _, _) = unsafe {
-                        create_host_buffer(self.vi.clone(), self.device.clone(), &inds, vk::BufferUsageFlags::INDEX_BUFFER, true)
+                    let (host_ibo, host_imo, _, host_ibo_size) = unsafe {
+                        create_host_buffer(self.vi.clone(), self.device.clone(), &inds, vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::INDEX_BUFFER, true)
+                    };
+                    let (local_vbo, local_vmo, _) = unsafe {
+                        create_local_buffer(self.vi.clone(), self.device.clone(), host_vbo_size, vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER)
+                    };
+                    let (local_ibo, local_imo, _) = unsafe {
+                        create_local_buffer(self.vi.clone(), self.device.clone(), host_ibo_size, vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER)
                     };
 
+                    unsafe { self.ctx.record(|cmd_buf| {
+                        let vert_buf_region = [vk::BufferCopy {src_offset: 0, dst_offset: 0, size: host_vbo_size}];
+                        self.device.cmd_copy_buffer(cmd_buf, host_vbo, local_vbo, &vert_buf_region);
+                        let indx_buf_region = [vk::BufferCopy {src_offset: 0, dst_offset: 0, size: host_ibo_size}];
+                        self.device.cmd_copy_buffer(cmd_buf, host_ibo, local_ibo, &indx_buf_region);
+                    }); }
+
                     self.to_render.push(RenderData::RecreateVertexBuffer(
-                        vertex_buffer, vertex_buffer_mem, purpose
+                        local_vbo, local_vmo, purpose
                     ));
                     self.to_render.push(RenderData::RecreateIndexBuffer(
-                        index_buffer, index_buffer_mem, inds.len() as u32, purpose
+                        local_ibo, local_imo, inds.len() as u32, purpose
                     ));
+
+                    unsafe {
+                        self.device.destroy_buffer(host_vbo, None);
+                        self.device.free_memory(host_vmo, None);
+                        self.device.destroy_buffer(host_ibo, None);
+                        self.device.free_memory(host_imo, None);
+                    }
                 }
                 self.chunk_update = false;
             }

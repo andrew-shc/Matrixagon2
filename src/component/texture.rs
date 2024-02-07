@@ -6,8 +6,8 @@ use ash::{Device, vk};
 use png;
 use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::handler::VulkanInstance;
-use crate::util::{cmd_recording, create_host_buffer, create_local_image};
-use crate::world::{WorldEvent};
+use crate::util::{CmdBufContext, create_host_buffer, create_local_image};
+use crate::world::WorldEvent;
 
 
 pub(crate) type TextureIDMapper = Rc<HashMap<String, u32>>;
@@ -299,8 +299,8 @@ impl Component for TextureHandler {
 
     }
 
-    unsafe fn load_descriptors(&mut self, cmd_pool: vk::CommandPool, queue: vk::Queue) -> Vec<RenderData> {
-        cmd_recording(self.device.clone(), cmd_pool, queue, self.record());
+    unsafe fn load_descriptors(&mut self, ctx: CmdBufContext) -> Vec<RenderData> {
+        ctx.record(self.record());
 
         let img_view_info = vk::ImageViewCreateInfo {
             image: self.img,

@@ -6,6 +6,7 @@ use crate::component::{Component, RenderData};
 use crate::component::camera::Length3D;
 use crate::component::texture::TextureIDMapper;
 use crate::debug::DebugVisibility;
+use crate::util::CmdBufContext;
 use crate::shader::Shader;
 
 
@@ -60,10 +61,10 @@ impl World {
         }
     }
 
-    pub(crate) unsafe fn load_descriptors(&mut self, cmd_pool: vk::CommandPool, queue: vk::Queue) -> Vec<RenderData> {
+    pub(crate) unsafe fn load_descriptors(&mut self, ctx: CmdBufContext) -> Vec<RenderData> {
         let mut descriptor_infos = Vec::new();
         for component in &mut self.components {
-            let mut t = component.load_descriptors(cmd_pool, queue);
+            let mut t = component.load_descriptors(ctx.clone());
             descriptor_infos.append(&mut t);
         }
 

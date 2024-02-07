@@ -4,6 +4,7 @@ pub mod texture;
 pub mod debug_ui;
 
 use ash::vk;
+use crate::util::CmdBufContext;
 use crate::world::{WorldEvent};
 
 
@@ -46,7 +47,7 @@ pub trait Component {
     fn respond_event(&mut self, event: WorldEvent) -> Vec<WorldEvent>;  // emits new event(s)
     fn update(&mut self);
     // Descriptable
-    unsafe fn load_descriptors(&mut self, _: vk::CommandPool, _: vk::Queue) -> Vec<RenderData> {Vec::new()}
+    unsafe fn load_descriptors(&mut self, _: CmdBufContext) -> Vec<RenderData> {Vec::new()}
     unsafe fn destroy(&mut self) {}
 }
 

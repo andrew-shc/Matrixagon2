@@ -38,40 +38,43 @@ pub(crate) fn matrix_ident() -> Mat4 {
     ]
 }
 
-pub(crate) unsafe fn cmd_recording<C: FnMut(vk::CommandBuffer) -> ()>(
-    device: Rc<Device>, cmd_pool: vk::CommandPool, queue_submission: vk::Queue, mut record: C
-) {
-    let cmd_alloc_info = vk::CommandBufferAllocateInfo {
-        command_pool: cmd_pool,
-        level: vk::CommandBufferLevel::PRIMARY,
-        command_buffer_count: 1,
-        ..Default::default()
-    };
-    let cmd_buf = device.allocate_command_buffers(&cmd_alloc_info)
-        .expect("Failed to allocate command buffers")
-        [0];
+#[derive(Clone)]
+pub struct CmdBufContext(pub(crate) Rc<Device>, pub(crate) vk::CommandPool, pub(crate) vk::Queue);
 
-    let cmd_begin_info = vk::CommandBufferBeginInfo {
-        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-        ..Default::default()
-    };
-    device.begin_command_buffer(cmd_buf, &cmd_begin_info)
-        .expect("Failed to begin recording command buffers");
+impl CmdBufContext {
+    pub(crate) unsafe fn record<C: FnMut(vk::CommandBuffer) -> ()>(&self, mut record: C) {
+        let cmd_alloc_info = vk::CommandBufferAllocateInfo {
+            command_pool: self.1,
+            level: vk::CommandBufferLevel::PRIMARY,
+            command_buffer_count: 1,
+            ..Default::default()
+        };
+        let cmd_buf = self.0.allocate_command_buffers(&cmd_alloc_info)
+            .expect("Failed to allocate command buffers")
+            [0];
 
-    record(cmd_buf);
+        let cmd_begin_info = vk::CommandBufferBeginInfo {
+            flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+            ..Default::default()
+        };
+        self.0.begin_command_buffer(cmd_buf, &cmd_begin_info)
+            .expect("Failed to begin recording command buffers");
 
-    device.end_command_buffer(cmd_buf)
-        .expect("Failed to record command buffers");
+        record(cmd_buf);
 
-    let submit_info = vk::SubmitInfo::builder()
-        .command_buffers(&[cmd_buf]).build();
+        self.0.end_command_buffer(cmd_buf)
+            .expect("Failed to record command buffers");
 
-    device.queue_submit(queue_submission, &[submit_info], vk::Fence::null())
-        .expect("Failed to submit draw command buffer to graphics queue");
+        let submit_info = vk::SubmitInfo::builder()
+            .command_buffers(&[cmd_buf]).build();
 
-    device.queue_wait_idle(queue_submission).unwrap();
+        self.0.queue_submit(self.2, &[submit_info], vk::Fence::null())
+            .expect("Failed to submit draw command buffer to graphics queue");
 
-    device.free_command_buffers(cmd_pool, &[cmd_buf])
+        self.0.queue_wait_idle(self.2).unwrap();
+
+        self.0.free_command_buffers(self.1, &[cmd_buf])
+    }
 }
 
 // pub(crate) unsafe fn create_image<D: Copy>(
@@ -143,7 +146,7 @@ pub(crate) unsafe fn create_host_buffer<D: Copy>(
     vi: Rc<VulkanInstance>, device: Rc<Device>, data: &[D], usage: vk::BufferUsageFlags, unmap: bool
 ) -> (vk::Buffer, vk::DeviceMemory, *mut ffi::c_void, vk::DeviceSize) {
     let (buf, buf_mem, buf_size) = allocate_buffer(
-        vi.clone(), device.clone(), data, usage, vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT
+        vi.clone(), device.clone(), (mem::size_of::<D>()*data.len()) as vk::DeviceSize, usage, vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT
     );
 
     let data_ptr = device.map_memory(buf_mem, 0, buf_size, vk::MemoryMapFlags::empty()).unwrap();
@@ -154,6 +157,16 @@ pub(crate) unsafe fn create_host_buffer<D: Copy>(
     }
 
     (buf, buf_mem, data_ptr, buf_size)
+}
+
+pub(crate) unsafe fn create_local_buffer(
+    vi: Rc<VulkanInstance>, device: Rc<Device>, size: vk::DeviceSize, usage: vk::BufferUsageFlags
+) -> (vk::Buffer, vk::DeviceMemory, vk::DeviceSize) {
+    let (buf, buf_mem, buf_size) = allocate_buffer(
+        vi.clone(), device.clone(), size, usage, vk::MemoryPropertyFlags::DEVICE_LOCAL
+    );
+
+    (buf, buf_mem, buf_size)
 }
 
 // pub(crate) unsafe fn create_local_buffer(
@@ -169,12 +182,12 @@ pub(crate) unsafe fn update_buffer<D: Copy>(data_ptr: *mut ffi::c_void, data: &[
     data_align.copy_from_slice(data);
 }
 
-pub(crate) unsafe fn allocate_buffer<D>(
-    vi: Rc<VulkanInstance>, device: Rc<Device>, data: &[D], usage: vk::BufferUsageFlags,
+pub(crate) unsafe fn allocate_buffer(
+    vi: Rc<VulkanInstance>, device: Rc<Device>, size: vk::DeviceSize, usage: vk::BufferUsageFlags,
     props: vk::MemoryPropertyFlags
 ) -> (vk::Buffer, vk::DeviceMemory, vk::DeviceSize) {
     let buffer_info = vk::BufferCreateInfo {
-        size: (mem::size_of::<D>()*data.len()) as vk::DeviceSize,
+        size,
         usage,
         sharing_mode: vk::SharingMode::EXCLUSIVE,
         ..Default::default()

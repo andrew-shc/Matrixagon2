@@ -1,14 +1,13 @@
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use ash::{Device, vk};
-use ash::vk::{CommandPool, Queue};
 use egui::{ClippedPrimitive, Context, ImageData, Mesh, RawInput, TextureFilter, TextureId};
 use egui::epaint::{ImageDelta, Primitive, Vertex};
 use uom::fmt::DisplayStyle;
 use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::handler::VulkanInstance;
 use crate::measurement::blox;
-use crate::util::{cmd_recording, create_host_buffer, create_local_image};
+use crate::util::{CmdBufContext, create_host_buffer, create_local_image};
 use crate::world::{CardinalDir, WorldEvent};
 
 
@@ -134,11 +133,11 @@ impl Component for DebugUI {
         unsafe { self.render_data = self.ui_handler.display(self.ui_data.clone(), Self::ui_program()); }
     }
 
-    unsafe fn load_descriptors(&mut self, cmd_pool: CommandPool, queue: Queue) -> Vec<RenderData> {
+    unsafe fn load_descriptors(&mut self, ctx: CmdBufContext) -> Vec<RenderData> {
         // TODO: assume egui will only create new descriptor texture once (for now)
         // TODO: ... also needs the full output from running the closure
 
-        cmd_recording(self.ui_handler.device.clone(), cmd_pool, queue, |cmd_buf| {
+        ctx.record(|cmd_buf| {
             for (_, ui_txtr) in &self.ui_handler.textures {
                 self.ui_handler.transfer_img_barrier(cmd_buf, ui_txtr);
             }

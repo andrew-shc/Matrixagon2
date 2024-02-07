@@ -154,7 +154,7 @@ impl MatrixagonApp {
                     Length::new::<blox>(0.0),
                 )
             )),
-            Box::new(Terrain::new(handler.vi.clone(), handler.device.clone(), vec![
+            Box::new(Terrain::new(handler.vi.clone(), handler.device.clone(), handler.get_cmd_buf_context(), vec![
                 BlockData {
                     ident: "grass_block",
                     texture_id: TextureMapper::Lateral("grass_top", "dirt", "grass_side"),
@@ -200,7 +200,7 @@ impl MatrixagonApp {
         };
 
         let mut descriptors = unsafe {
-            world.load_descriptors(handler.cmd_pool, handler.gfxs_queue)
+            world.load_descriptors(handler.get_cmd_buf_context())
         };
         let swpc = unsafe {
             SwapchainManager::new(debug_visibility, handler.vi.clone(), handler.device.clone(), shader.renderpass(), shader.attachments(), prsnt_inp)

@@ -3,10 +3,10 @@ use ash::{Device, vk};
 use winit::event::VirtualKeyCode;
 use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::handler::VulkanInstance;
-use crate::util::{Mat4, matrix_prod};
+use crate::util::{CmdBufContext, Mat4, matrix_prod};
 use crate::world::{CardinalDir, WorldEvent};
 use std::{ffi, mem};
-use uom::{si};
+use uom::si;
 use uom::num_traits::Zero;
 use uom::si::f32::{Angle, Length};
 use crate::measurement::blox;
@@ -283,7 +283,7 @@ impl Component for CameraComponent {
         }
     }
 
-    unsafe fn load_descriptors(&mut self, _cmd_pool: vk::CommandPool, _queue: vk::Queue) -> Vec<RenderData> {
+    unsafe fn load_descriptors(&mut self, _: CmdBufContext) -> Vec<RenderData> {
         let data = CameraUBO {
             view: self.view_mat(),
             proj: self.proj_mat(),

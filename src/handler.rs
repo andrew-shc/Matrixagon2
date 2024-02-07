@@ -3,7 +3,7 @@ use std::ffi::{c_char, CStr};
 use std::os::raw::c_void;
 use std::rc::Rc;
 use ash::extensions::ext::DebugUtils;
-use ash::extensions::khr::{Surface};
+use ash::extensions::khr::Surface;
 use ash::{Device, Instance, vk};
 use ash_window::create_surface;
 use winit::event_loop::EventLoop;
@@ -12,6 +12,7 @@ use winit::window::Window;
 use crate::debug::DebugVisibility;
 use crate::shader::Shader;
 use crate::swapchain::{query_swapchain_support, SwapchainManager};
+use crate::util::CmdBufContext;
 
 
 const DEVICE_EXTS: &[*const c_char] = &[
@@ -36,10 +37,11 @@ pub struct VulkanHandler {
 
     pub(crate) vi: Rc<VulkanInstance>,
     pub(crate) device: Rc<Device>,
-    pub(crate) gfxs_queue: vk::Queue,
-    pub(crate) prsnt_queue: vk::Queue,
+    gfxs_queue: vk::Queue,
+    prsnt_queue: vk::Queue,
     pub(crate) swapchain: Option<SwapchainManager>,
-    pub(crate) cmd_pool: vk::CommandPool,
+    cmd_pool: vk::CommandPool,
+    transient_cmd_pool: vk::CommandPool,
 
     render_cmd_buf: vk::CommandBuffer,
     sync: SyncMTXG,
@@ -57,6 +59,7 @@ impl VulkanHandler {
         let gfxs_queue;
         let prsnt_queue;
         let cmd_pool;
+        let transient_cmd_pool;
         let render_cmd_buf;
         let sync;
         unsafe {
@@ -190,6 +193,14 @@ impl VulkanHandler {
             cmd_pool = device.create_command_pool(&cmd_pool_info, None)
                 .expect("Failed to create command pool");
 
+            let transient_cmd_pool_info = vk::CommandPoolCreateInfo {
+                flags: vk::CommandPoolCreateFlags::TRANSIENT,
+                queue_family_index: ind,
+                ..Default::default()
+            };
+            transient_cmd_pool = device.create_command_pool(&cmd_pool_info, None)
+                .expect("Failed to create command pool");
+
             let cmd_alloc_info = vk::CommandBufferAllocateInfo {
                 command_pool: cmd_pool,
                 level: vk::CommandBufferLevel::PRIMARY,
@@ -222,7 +233,7 @@ impl VulkanHandler {
         VulkanHandler {
             debug_output, validate, debug_loader, debug,
             vi: vi.clone(), device, gfxs_queue, prsnt_queue,
-            swapchain: None, cmd_pool,
+            swapchain: None, cmd_pool, transient_cmd_pool,
             render_cmd_buf: render_cmd_buf[0], sync, shader: None,
         }
     }
@@ -238,6 +249,10 @@ impl VulkanHandler {
 
     pub(crate) fn load_swapchain(&mut self, swapchain_manager: SwapchainManager) {
         self.swapchain.replace(swapchain_manager);
+    }
+
+    pub(crate) fn get_cmd_buf_context(&self) -> CmdBufContext {
+        CmdBufContext(self.device.clone(), self.transient_cmd_pool, self.gfxs_queue)
     }
 
     pub(crate) unsafe fn draw_frame(&mut self) {
@@ -324,6 +339,7 @@ impl VulkanHandler {
         self.device.destroy_semaphore(self.sync.render_finished_smph, None);
         self.device.destroy_fence(self.sync.in_flight_fence, None);
 
+        self.device.destroy_command_pool(self.transient_cmd_pool, None);
         self.device.destroy_command_pool(self.cmd_pool, None);
 
         if let Some(shader) = &self.shader {
