@@ -4,7 +4,7 @@ layout(location = 0) in vec2 tex_coord;
 layout(location = 1) in vec3 in_color;
 
 
-layout(location = 0) out vec4 out_color;  // renderpass: color attachment #2
+layout(location = 0) out vec4 out_color;  // renderpass: color attachment #0
 
 layout(set = 1, binding = 0) uniform sampler2D font_sampler;
 layout(input_attachment_index = 0, set = 1, binding = 1) uniform subpassInput inputColor;

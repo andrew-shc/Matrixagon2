@@ -70,16 +70,18 @@ pub(crate) struct CameraComponent {
 
 impl CameraComponent {
     pub(crate) fn new(vi: Rc<VulkanInstance>, device: Rc<Device>,
-                      aspect_ratio: f32, fov: f32, trans_speed: f32, rot_speed: f32) -> CameraComponent {
+                      aspect_ratio: f32, fov: f32, trans_speed: f32, rot_speed: f32,
+                      init_pos: Length3D
+    ) -> CameraComponent {
         // let init_rot = (180.0f32).to_radians();
         CameraComponent {
             descriptor: unsafe { CameraDescriptor::new(vi.clone(), device.clone()) },
-            trans_speed, rot_speed, t: Length3D::default(), r: Rotation::default(),
+            trans_speed, rot_speed, t: init_pos, r: Rotation::default(),
             translations: Vec::new(), rotated: false, direction: Self::determine_dir(Angle::zero()),
             rot_x: Self::rot_x_mat(0.0),
             rot_y: Self::rot_y_mat(0.0),
             rot_z: Self::rot_z_mat(0.0),
-            trans: Self::trans_mat(Length3D::default()),
+            trans: Self::trans_mat(init_pos),
             far: 100000.0, near: 0.1, aspect_ratio, fov: fov.to_radians(),
         }
     }

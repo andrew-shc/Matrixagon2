@@ -4,16 +4,8 @@ use ash::{Device, vk};
 use egui::epaint::Vertex;
 use crate::component::RenderData;
 use crate::{get_vertex_inp};
-use crate::shader::{DescriptorManager, gen_shader_modules_info};
+use crate::shader::{DescriptorManager, destroy_shader_modules, gen_shader_modules_info};
 
-
-// fn vertex_inp() -> vk::PipelineVertexInputStateCreateInfo {
-//     get_vertex_inp::<Vertex>(vec![
-//         (vk::Format::R32G32_SFLOAT, offset_of!(Vertex, pos) as u32),
-//         (vk::Format::R32G32_SFLOAT, offset_of!(Vertex, uv) as u32),
-//         (vk::Format::R8G8B8A8_UNORM, offset_of!(Vertex, color) as u32),
-//     ])
-// }
 
 pub struct DebugUISubShader {
     device: Rc<Device>,
@@ -117,9 +109,7 @@ impl DebugUISubShader {
 
         let gfxs_pipeline = device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None).unwrap();
 
-        for module in shader_modules {
-            device.destroy_shader_module(module, None);
-        }
+        destroy_shader_modules(device.clone(), shader_modules);
 
         Self {
             device: device.clone(),

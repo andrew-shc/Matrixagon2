@@ -24,17 +24,19 @@ use std::time::Instant;
 use ash::vk;
 use egui::{Id, Modifiers, Pos2, RawInput, Rect, ViewportId, ViewportIdMap, ViewportInfo};
 use egui::ahash::HashMapExt;
+use uom::si::f32::Length;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window, WindowBuilder};
-use crate::component::camera::CameraComponent;
+use crate::component::camera::{CameraComponent, Length3D};
 use crate::component::debug_ui::{DebugUI};
 use crate::debug::DebugVisibility;
 use crate::handler::VulkanHandler;
 use crate::world::{World, WorldEvent};
-use crate::component::terrain::Terrain;
+use crate::component::terrain::{BlockData, MeshType, Terrain, TextureMapper};
 use crate::component::texture::TextureHandler;
+use crate::measurement::{blox, chux};
 use crate::shader::chunk::ChunkRasterizer;
 use crate::shader::Shader;
 use crate::swapchain::{best_surface_color_and_depth_format, SwapchainManager};
@@ -145,9 +147,40 @@ impl MatrixagonApp {
         let ratio = initial_extent.width as f32/initial_extent.height as f32;
         let mut world = World::new(debug_visibility, vec![
             Box::new(CameraComponent::new(
-                handler.vi.clone(), handler.device.clone(), ratio, 70.0, 0.01, 0.05
+                handler.vi.clone(), handler.device.clone(), ratio, 70.0, 0.01, 0.05,
+                Length3D::new(
+                    Length::new::<blox>(0.0),
+                    Length::new::<blox>(40.0),
+                    Length::new::<blox>(0.0),
+                )
             )),
-            Box::new(Terrain::new(handler.vi.clone(), handler.device.clone())),
+            Box::new(Terrain::new(handler.vi.clone(), handler.device.clone(), vec![
+                BlockData {
+                    ident: "grass_block",
+                    texture_id: TextureMapper::Lateral("grass_top", "dirt", "grass_side"),
+                    mesh: MeshType::Cube,
+                },
+                BlockData {
+                    ident: "dirt",
+                    texture_id: TextureMapper::All("dirt"),
+                    mesh: MeshType::Cube,
+                },
+                BlockData {
+                    ident: "stone",
+                    texture_id: TextureMapper::All("stone"),
+                    mesh: MeshType::Cube,
+                },
+                BlockData {
+                    ident: "stone",
+                    texture_id: TextureMapper::All("sand"),
+                    mesh: MeshType::Cube,
+                },
+                BlockData {
+                    ident: "grass",
+                    texture_id: TextureMapper::All("grass_flora"),
+                    mesh: MeshType::XCross,
+                },
+            ])),
             Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone(), vec![
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/null.png"),
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/stone.png"),
@@ -155,6 +188,8 @@ impl MatrixagonApp {
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_side.png"),
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/dirt.png"),
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/sand.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_flora.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_top.png"),
             ])),
             Box::new(DebugUI::new(handler.vi.clone(), handler.device.clone(), init_raw_input)),
         ]);

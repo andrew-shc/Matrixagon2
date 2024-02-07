@@ -1,19 +1,16 @@
 use std::collections::HashMap;
 use uom::si::f32::Length;
 use crate::component::camera::{Length3D};
+use crate::component::RenderDataPurpose;
 use crate::measurement::chux;
 
-
-
-// pub(crate) type ChunkGen<P> = Box<dyn Fn(Length3D, Length3D) -> Box<[P]>>;
-// pub(crate) type MeshGen<P, V, I> = Box<dyn Fn(&HashMap<ChunkPosition, Chunk<P>>) -> (Vec<V>, Vec<I>)>;
 
 pub(crate) trait ChunkGeneratable {
     type P;
     type V;
     type I;
     fn generate_chunk(&self, pos: Length3D) -> Box<[Self::P]>;
-    fn generate_mesh(&self, chunks: &HashMap<ChunkPosition, Chunk<Self::P>>) -> (Vec<Self::V>, Vec<Self::I>);
+    fn generate_mesh(&self, chunks: &HashMap<ChunkPosition, Chunk<Self::P>>) -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>;
 }
 
 
@@ -198,7 +195,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
     }
 
     // generate the entire aggregated vertices/indices
-    pub(crate) fn generate_vertices(&mut self) -> (Vec<G::V>, Vec<G::I>) {
+    pub(crate) fn generate_vertices(&mut self) -> Vec<(Vec<G::V>, Vec<G::I>, RenderDataPurpose)> {
         self.generator.generate_mesh(&self.chunks)
     }
 }
