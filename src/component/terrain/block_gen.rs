@@ -364,9 +364,12 @@ impl ChunkGeneratable for BlockGenerator<'_> {
                             if matches!(self.block_ind[block.0 as usize].mesh, MeshType::XCross) => {
                                 let txtr = self.block_ind[block.0 as usize].texture_id;
 
+                                let c_pos = chunk_pos(x,y,z);
+                                // c_pos.2 += 0.1;
+
                                 // let (mut verts, mut inds, add_face) = local_gen_xcross(x, y, z, txtr);
                                 let (mut verts, mut inds) = self.gen_xcross(
-                                    chunk_pos(x,y,z), transparent_faces*4, txtr,
+                                    c_pos, transparent_faces*4, txtr,
                                 );
                                 transparent_total_verts.append(&mut verts);
                                 transparent_total_inds.append(&mut inds);

@@ -11,12 +11,9 @@ layout(location = 2) in float ind;
 
 layout(location = 0) out float out_ind;
 layout(location = 1) out vec2 tex_coord;
-//layout(location = 0) out vec3 DEBUG_pos;
 
 void main() {
     gl_Position = ubo.proj * ubo.view * vec4(position, 1.0);
-//    gl_Position = vec4(position, 1.0);
     tex_coord = uv;
-//    DEBUG_pos = position;
     out_ind = ind;
 }

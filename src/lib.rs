@@ -19,6 +19,7 @@
 #[macro_use]
 extern crate uom;
 
+use std::env;
 use std::path::Path;
 use std::time::Instant;
 use ash::vk;
@@ -180,6 +181,11 @@ impl MatrixagonApp {
                     texture_id: TextureMapper::All("grass_flora"),
                     mesh: MeshType::XCross,
                 },
+                BlockData {
+                    ident: "flower",
+                    texture_id: TextureMapper::All("flower"),
+                    mesh: MeshType::XCross,
+                },
             ])),
             Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone(), vec![
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/null.png"),
@@ -190,6 +196,7 @@ impl MatrixagonApp {
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/sand.png"),
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_flora.png"),
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_top.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/flower.png"),
             ])),
             Box::new(DebugUI::new(handler.vi.clone(), handler.device.clone(), init_raw_input)),
         ]);
