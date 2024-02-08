@@ -59,7 +59,7 @@ impl ChunkRasterizer {
 
         let (transparent_shader_stages, transparent_shader_modules) = gen_shader_modules_info(
             device.clone(), vec![
-                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_transparent.vert", vk::ShaderStageFlags::VERTEX),
+                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.vert", vk::ShaderStageFlags::VERTEX),
                 ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_transparent.frag", vk::ShaderStageFlags::FRAGMENT),
             ]);
 

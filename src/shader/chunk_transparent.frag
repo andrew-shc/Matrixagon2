@@ -2,7 +2,6 @@
 
 layout(location = 0) in float txtr_ind;
 layout(location = 1) in vec2 tex_coord;
-layout(location = 2) in float calc_depth;
 
 layout(location = 0) out vec4 out_color;  // renderpass: color attachment #0
 
