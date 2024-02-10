@@ -54,6 +54,7 @@ impl<'b> BlockGenerator<'b> {
     fn gen_face(&self, loc: (f32, f32, f32), ind_ofs: u32, face: FaceDir, txtr_mapping: TextureMapper, fluid: bool) -> (Vec<ChunkVertex>, Vec<u32>) {
         let txtr_mapper = |name: &str| *self.txtr_id_mapper.get(name).unwrap_or(&0) as f32;
 
+        // TODO: encode indent height into the shader itself
         let hgt = if fluid {
             0.9
         } else {

@@ -19,6 +19,7 @@ pub(crate) enum CardinalDir {
     UNDEFINED,
 }
 
+// NO REFERENCES (potentially be used for async/multithreading purposes)
 #[derive(Clone, Debug)]
 pub(crate) enum WorldEvent {
     // general sync events

@@ -151,8 +151,20 @@ impl MatrixagonApp {
             Box::new(TickSync::new(
                 handler.vi.clone(), handler.device.clone(), 1.5,
             )),
+            Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone(), vec![
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/null.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/stone.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_top.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_side.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/dirt.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/sand.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_flora.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_top.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/flower.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/water.png"),
+            ])),
             Box::new(CameraComponent::new(
-                handler.vi.clone(), handler.device.clone(), ratio, 70.0, 0.01, 0.05,
+                handler.vi.clone(), handler.device.clone(), ratio, 70.0, 1.0, 0.05,
                 Length3D::new(
                     Length::new::<blox>(0.0),
                     Length::new::<blox>(40.0),
@@ -202,18 +214,6 @@ impl MatrixagonApp {
                     mesh: MeshType::Fluid,
                     transparency: TransparencyType::Translucent,
                 },
-            ])),
-            Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone(), vec![
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/null.png"),
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/stone.png"),
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_top.png"),
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_side.png"),
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/dirt.png"),
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/sand.png"),
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_flora.png"),
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_top.png"),
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/flower.png"),
-                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/water.png"),
             ])),
             Box::new(DebugUI::new(handler.vi.clone(), handler.device.clone(), init_raw_input)),
         ]);

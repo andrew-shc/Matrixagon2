@@ -161,7 +161,8 @@ impl Component for Terrain<'static> {
         match event {
             WorldEvent::UserPosition(pos) => {
                 if let Some(ref mut chunk_mesh) = self.chunk_mesh {
-                    self.chunk_update = self.chunk_update || chunk_mesh.update(pos);
+                    let need_update = chunk_mesh.update(pos);
+                    self.chunk_update = self.chunk_update || need_update;
                 }
             }
             WorldEvent::NewTextureMapper(txtr_mapper) => {

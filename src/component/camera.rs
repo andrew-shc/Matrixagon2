@@ -50,6 +50,7 @@ pub(crate) struct CameraComponent {
     // high-level parameters
     trans_speed: f32,
     rot_speed: f32,
+    delta_trans_speed: f32,
     // camera state
     t: Length3D,  // translations are in blocks
     r: Rotation,
@@ -76,7 +77,7 @@ impl CameraComponent {
         // let init_rot = (180.0f32).to_radians();
         CameraComponent {
             descriptor: unsafe { CameraDescriptor::new(vi.clone(), device.clone()) },
-            trans_speed, rot_speed, t: init_pos, r: Rotation::default(),
+            trans_speed, delta_trans_speed: trans_speed, rot_speed, t: init_pos, r: Rotation::default(),
             translations: Vec::new(), rotated: false, direction: Self::determine_dir(Angle::zero()),
             rot_x: Self::rot_x_mat(0.0),
             rot_y: Self::rot_y_mat(0.0),
@@ -107,13 +108,13 @@ impl CameraComponent {
     pub(crate) fn move_forward(&mut self, deg: Angle) {
         // by default, 0 degrees means right
         let angle = deg+Angle::new::<si::angle::degree>(90.0);
-        self.t.x = self.t.x+Length::new::<blox>((self.trans_speed*(angle+self.r.y).cos()).get::<si::ratio::ratio>());
-        self.t.z = self.t.z+Length::new::<blox>((self.trans_speed*(angle+self.r.y).sin()).get::<si::ratio::ratio>());
+        self.t.x = self.t.x+Length::new::<blox>((self.delta_trans_speed*(angle+self.r.y).cos()).get::<si::ratio::ratio>());
+        self.t.z = self.t.z+Length::new::<blox>((self.delta_trans_speed*(angle+self.r.y).sin()).get::<si::ratio::ratio>());
         self.trans = Self::trans_mat(self.t);
     }
 
     pub(crate) fn move_vertical(&mut self, multiplier: i64) {
-        self.t.y = self.t.y+Length::new::<blox>(multiplier as f32*self.trans_speed);
+        self.t.y = self.t.y+Length::new::<blox>(multiplier as f32*self.delta_trans_speed);
         self.trans = Self::trans_mat(self.t);
     }
 
@@ -201,7 +202,11 @@ impl Component for CameraComponent {
 
     fn respond_event(&mut self, event: WorldEvent) -> Vec<WorldEvent> {
         let mut dir_changed = false;
+        let mut trans_changed = false;
         match event {
+            WorldEvent::DeltaTime(delta) => {
+                self.delta_trans_speed = delta.as_secs_f32() * self.trans_speed;
+            }
             WorldEvent::MouseMotion((x, y)) => {
                 self.rotate(Rotation {
                     x: Angle::new::<si::angle::degree>(y as f32),
@@ -220,6 +225,7 @@ impl Component for CameraComponent {
                     VirtualKeyCode::W | VirtualKeyCode::A | VirtualKeyCode::S | VirtualKeyCode::D |
                     VirtualKeyCode::LShift | VirtualKeyCode::Space => {
                         self.translations.push(key);
+                        trans_changed = true;
                     }
                     _ => {}
                 }
@@ -229,12 +235,14 @@ impl Component for CameraComponent {
                     VirtualKeyCode::W | VirtualKeyCode::A | VirtualKeyCode::S | VirtualKeyCode::D |
                     VirtualKeyCode::LShift | VirtualKeyCode::Space => {
                         self.translations.retain(|t| t != remove_key);
+                        trans_changed = !self.translations.is_empty();
                     }
                     _ => {}
                 }
             }
             WorldEvent::Start => {
                 dir_changed = true;
+                trans_changed = true;
             }
             _ => {}
         }
@@ -243,7 +251,7 @@ impl Component for CameraComponent {
         if dir_changed {
             new_events.push(WorldEvent::UserFaceDir(self.direction));
         }
-        if !self.translations.is_empty() {
+        if trans_changed {
             new_events.push(WorldEvent::UserPosition(self.t));
         }
 
