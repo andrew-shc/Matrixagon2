@@ -51,8 +51,14 @@ impl<'b> BlockGenerator<'b> {
         0 <= x && x < self.chunk_size && 0 <= y && y < self.chunk_size && 0 <= z && z < self.chunk_size
     }
 
-    fn gen_face(&self, loc: (f32, f32, f32), ind_ofs: u32, face: FaceDir, txtr_mapping: TextureMapper) -> (Vec<ChunkVertex>, Vec<u32>) {
+    fn gen_face(&self, loc: (f32, f32, f32), ind_ofs: u32, face: FaceDir, txtr_mapping: TextureMapper, fluid: bool) -> (Vec<ChunkVertex>, Vec<u32>) {
         let txtr_mapper = |name: &str| *self.txtr_id_mapper.get(name).unwrap_or(&0) as f32;
+
+        let hgt = if fluid {
+            0.9
+        } else {
+            1.0
+        };
 
         let (v, i) = match face {
             FaceDir::FRONT => {
@@ -61,9 +67,9 @@ impl<'b> BlockGenerator<'b> {
                 (
                     vec![
                         ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2+0.0], uv: [0.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2+0.0], uv: [0.0, 0.0], txtr },
                         ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2+0.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2+0.0], uv: [1.0, 0.0], txtr },
                     ],
                     vec![0,1,2,3,1,0]
                 )
@@ -74,9 +80,9 @@ impl<'b> BlockGenerator<'b> {
                 (
                     vec![
                         ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2+0.0], uv: [1.0, 0.0], txtr },
                         ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2-1.0], uv: [0.0, 0.0], txtr },
                     ],
                     vec![0,2,1,3,1,2]
                 )}
@@ -87,8 +93,8 @@ impl<'b> BlockGenerator<'b> {
                     vec![
                         ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0], txtr },
                         ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [1.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2-1.0], uv: [0.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2-1.0], uv: [1.0, 0.0], txtr },
                     ],
                     vec![1,0,3,2,3,0]
                 )}
@@ -98,9 +104,9 @@ impl<'b> BlockGenerator<'b> {
                 (
                     vec![
                         ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2+0.0], uv: [1.0, 0.0], txtr },
                         ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2-1.0], uv: [0.0, 0.0], txtr },
                     ],
                     vec![2,0,3,1,3,0]
                 )}
@@ -109,10 +115,10 @@ impl<'b> BlockGenerator<'b> {
 
                 (
                     vec![
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2+0.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [1.0, 0.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2+0.0], uv: [1.0, 1.0], txtr },
+                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2+0.0], uv: [0.0, 1.0], txtr },
+                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2-1.0], uv: [1.0, 0.0], txtr },
+                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2-1.0], uv: [0.0, 0.0], txtr },
                     ],
                     vec![0,1,2,3,2,1]
                 )}
@@ -329,7 +335,7 @@ impl ChunkGeneratable for BlockGenerator<'_> {
                                 // chunk border mesh culling (more like checking whether any exposed border faces that needs to be shown/added)
                                 if !cull_border_face(x, y, z, face_dir) && !border_always_clear {
                                     let (mut verts, mut inds) = self.gen_face(
-                                        chunk_pos(x,y,z), *total_faces*4, face_dir, txtr_mapping,
+                                        chunk_pos(x,y,z), *total_faces*4, face_dir, txtr_mapping, fluid
                                     );
                                     total_verts.append(&mut verts);
                                     total_inds.append(&mut inds);
@@ -341,7 +347,7 @@ impl ChunkGeneratable for BlockGenerator<'_> {
                                 if (!fluid && !Self::check_block_obscured(block_cull)) || (fluid && !Self::check_fluid_obscured(block_cull)) {
                                     // if delta face coord is in chunk and not obscured
                                     let (mut verts, mut inds) = self.gen_face(
-                                        chunk_pos(x,y,z), *total_faces*4, face_dir, txtr_mapping,
+                                        chunk_pos(x,y,z), *total_faces*4, face_dir, txtr_mapping, fluid
                                     );
                                     total_verts.append(&mut verts);
                                     total_inds.append(&mut inds);
