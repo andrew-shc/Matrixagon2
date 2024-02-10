@@ -2,6 +2,7 @@ pub mod camera;
 pub mod terrain;
 pub mod texture;
 pub mod debug_ui;
+pub mod tick;
 
 use ash::vk;
 use crate::util::CmdBufContext;
@@ -19,6 +20,7 @@ pub enum RenderDataPurpose {
     PresentationInpAttachment,
     DebugUI,
     DebugUIInpAttachment,
+    Time,
 }
 
 

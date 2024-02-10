@@ -147,8 +147,8 @@ impl DebugUISubShader {
         // self.device.cmd_set_scissor(cmd_buf, 0, &[self.scissor.unwrap()]);
 
         self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.gfxs_pipeline);
-        self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, descriptor.pipeline_layout(),
-                                             1, &descriptor.descriptor_sets(&[1]), &[]);
+        // self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, descriptor.pipeline_layout(),
+        //                                      1, &descriptor.descriptor_sets(&[1]), &[]);
         self.device.cmd_draw_indexed(cmd_buf, self.ui_ibo.unwrap().2, 1, 0, 0, 0);
     }
 

@@ -37,6 +37,7 @@ use crate::handler::VulkanHandler;
 use crate::world::{World, WorldEvent};
 use crate::component::terrain::{BlockData, MeshType, Terrain, TextureMapper, TransparencyType};
 use crate::component::texture::TextureHandler;
+use crate::component::tick::TickSync;
 use crate::measurement::{blox, chux};
 use crate::shader::chunk::ChunkRasterizer;
 use crate::shader::Shader;
@@ -147,6 +148,9 @@ impl MatrixagonApp {
 
         let ratio = initial_extent.width as f32/initial_extent.height as f32;
         let mut world = World::new(debug_visibility, vec![
+            Box::new(TickSync::new(
+                handler.vi.clone(), handler.device.clone(), 1.5,
+            )),
             Box::new(CameraComponent::new(
                 handler.vi.clone(), handler.device.clone(), ratio, 70.0, 0.01, 0.05,
                 Length3D::new(

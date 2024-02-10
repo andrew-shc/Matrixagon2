@@ -48,6 +48,9 @@ impl ChunkRasterizer {
                 (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT), // egui debug ui texture
                 (vk::DescriptorType::INPUT_ATTACHMENT, vk::ShaderStageFlags::FRAGMENT), // input attachment from previous
             ],
+            vec![  // set 2 for animations
+                (vk::DescriptorType::UNIFORM_BUFFER, vk::ShaderStageFlags::VERTEX)  // time
+            ]
             // vec![  // set 2 for transparency
             //     (vk::DescriptorType::INPUT_ATTACHMENT, vk::ShaderStageFlags::FRAGMENT), // input attachment from main color shader
             // ],
@@ -69,7 +72,7 @@ impl ChunkRasterizer {
 
         let (translucent_fluid_shader_stages, translucent_fluid_shader_modules) = gen_shader_modules_info(
             device.clone(), vec![
-                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.vert", vk::ShaderStageFlags::VERTEX),
+                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_fluid.vert", vk::ShaderStageFlags::VERTEX),
                 ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_translucent.frag", vk::ShaderStageFlags::FRAGMENT),
             ]);
 
@@ -356,6 +359,9 @@ impl Shader for ChunkRasterizer {
                 RenderData::InitialDescriptorImage(img, RenderDataPurpose::PresentationInpAttachment) => {
                     self.descriptor.write_image(1, 1, img);
                 }
+                RenderData::InitialDescriptorBuffer(buf, RenderDataPurpose::Time) => {
+                    self.descriptor.write_buffer(2, 0, buf);
+                }
                 _ => {},
             }
         }
@@ -485,7 +491,7 @@ impl Shader for ChunkRasterizer {
             self.device.cmd_set_scissor(cmd_buf, 0, &[scissor]);
 
             self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.descriptor.pipeline_layout(),
-                                                 0, &self.descriptor.descriptor_sets(&[0]), &[]);
+                                                 0, &self.descriptor.descriptor_sets(&[0, 1, 2]), &[]);
 
             self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.gfxs_pipeline);
 
@@ -523,6 +529,7 @@ impl Shader for ChunkRasterizer {
             self.device.destroy_buffer(old_buf, None);
             self.device.free_memory(old_mem, None);
         }
+
         if let Some((old_buf, old_mem)) = self.transparent_vbo {
             self.device.destroy_buffer(old_buf, None);
             self.device.free_memory(old_mem, None);
@@ -544,6 +551,7 @@ impl Shader for ChunkRasterizer {
         self.device.destroy_pipeline(self.gfxs_pipeline, None);
         self.device.destroy_pipeline(self.transparent_gfxs_pipeline, None);
         self.device.destroy_pipeline(self.translucent_fluid_gfxs_pipeline, None);
+
         self.descriptor.destroy();
         self.device.destroy_render_pass(self.renderpass, None);
     }
