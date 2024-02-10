@@ -3,6 +3,7 @@ pub mod terrain;
 pub mod texture;
 pub mod debug_ui;
 pub mod tick;
+pub mod flags;
 
 use ash::vk;
 use crate::util::CmdBufContext;

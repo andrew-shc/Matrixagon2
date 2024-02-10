@@ -4,6 +4,7 @@ use std::rc::Rc;
 use ash::{Device, vk};
 use noise::NoiseFn;
 use uom::si::f32::Length;
+use winit::event::VirtualKeyCode;
 use crate::chunk_mesh::ChunkMesh;
 use crate::component::{Component, RenderData};
 use crate::component::camera::Length3D;
@@ -134,6 +135,8 @@ pub(crate) struct Terrain<'b> {
     chunk_update: bool,
 
     chunk_size: u32,
+
+    spectator_mode: bool,
 }
 
 impl<'b> Terrain<'b> {
@@ -147,6 +150,7 @@ impl<'b> Terrain<'b> {
             to_render: vec![],
             chunk_update: true,
             chunk_size,
+            spectator_mode: false,
         }
     }
 }
@@ -159,7 +163,7 @@ impl Component for Terrain<'static> {
 
     fn respond_event(&mut self, event: WorldEvent) -> Vec<WorldEvent> {
         match event {
-            WorldEvent::UserPosition(pos) => {
+            WorldEvent::UserPosition(pos) if !self.spectator_mode => {
                 if let Some(ref mut chunk_mesh) = self.chunk_mesh {
                     let need_update = chunk_mesh.update(pos);
                     self.chunk_update = self.chunk_update || need_update;
@@ -188,6 +192,9 @@ impl Component for Terrain<'static> {
                 chunk_mesher.initialize();
 
                 self.chunk_mesh.replace(chunk_mesher);
+            }
+            WorldEvent::SpectatorMode(enabled) => {
+                self.spectator_mode = enabled;
             }
             _ => {}
         }

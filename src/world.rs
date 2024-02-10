@@ -41,6 +41,7 @@ pub(crate) enum WorldEvent {
     // app events
     UserFaceDir(CardinalDir),
     UserPosition(Length3D),
+    SpectatorMode(bool),
 
     // TODO: request events? to reduce constant events emission
 }

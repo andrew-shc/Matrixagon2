@@ -16,6 +16,7 @@ pub(crate) struct DebugUIData {
     face_direction: String,
     fps: String,
     pos: String,
+    spectator_mode: String,
 
     fps_hist: VecDeque<f32>,
 }
@@ -26,6 +27,7 @@ impl Default for DebugUIData {
             face_direction: String::from(".face_direction: <UNDEFINED>"),
             fps: String::from(".fps: <UNDEFINED>"),
             pos: String::from(".pos: <UNDEFINED>"),
+            spectator_mode: String::from(".spectator_mode: <UNDEFINED>"),
             fps_hist: VecDeque::new(),
         }
     }
@@ -54,12 +56,14 @@ impl DebugUI {
         s
     }
 
+    // >>> UI PROGRAM <<<
     fn ui_program() -> impl FnOnce(&Context, DebugUIData) {
         |ctx: &Context, data: DebugUIData| {
             egui::CentralPanel::default().show(&ctx, |ui| {
                 ui.label(data.face_direction);
                 ui.label(data.fps);
                 ui.label(data.pos);
+                ui.label(data.spectator_mode);
             });
         }
     }
@@ -119,6 +123,13 @@ impl Component for DebugUI {
                                            pos.x.round::<blox>().into_format_args(blox, DisplayStyle::Abbreviation),
                                            pos.y.round::<blox>().into_format_args(blox, DisplayStyle::Abbreviation),
                                            pos.z.round::<blox>().into_format_args(blox, DisplayStyle::Abbreviation));
+            }
+            WorldEvent::SpectatorMode(enabled) => {
+                self.ui_data.spectator_mode = if enabled {
+                    String::from("Spectator Mode: TRUE")
+                } else {
+                    String::from("Spectator Mode: FALSE")
+                };
             }
             _ => {}
         }
