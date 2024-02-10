@@ -35,7 +35,7 @@ use crate::component::debug_ui::{DebugUI};
 use crate::debug::DebugVisibility;
 use crate::handler::VulkanHandler;
 use crate::world::{World, WorldEvent};
-use crate::component::terrain::{BlockData, MeshType, Terrain, TextureMapper};
+use crate::component::terrain::{BlockData, MeshType, Terrain, TextureMapper, TransparencyType};
 use crate::component::texture::TextureHandler;
 use crate::measurement::{blox, chux};
 use crate::shader::chunk::ChunkRasterizer;
@@ -160,31 +160,43 @@ impl MatrixagonApp {
                     ident: "grass_block",
                     texture_id: TextureMapper::Lateral("grass_top", "dirt", "grass_side"),
                     mesh: MeshType::Cube,
+                    transparency: TransparencyType::Opaque,
                 },
                 BlockData {
                     ident: "dirt",
                     texture_id: TextureMapper::All("dirt"),
                     mesh: MeshType::Cube,
+                    transparency: TransparencyType::Opaque,
                 },
                 BlockData {
                     ident: "stone",
                     texture_id: TextureMapper::All("stone"),
                     mesh: MeshType::Cube,
+                    transparency: TransparencyType::Opaque,
                 },
                 BlockData {
-                    ident: "stone",
+                    ident: "sand",
                     texture_id: TextureMapper::All("sand"),
                     mesh: MeshType::Cube,
+                    transparency: TransparencyType::Opaque,
                 },
                 BlockData {
                     ident: "grass",
                     texture_id: TextureMapper::All("grass_flora"),
                     mesh: MeshType::XCross,
+                    transparency: TransparencyType::Transparent,
                 },
                 BlockData {
                     ident: "flower",
                     texture_id: TextureMapper::All("flower"),
                     mesh: MeshType::XCross,
+                    transparency: TransparencyType::Transparent,
+                },
+                BlockData {
+                    ident: "water",
+                    texture_id: TextureMapper::All("water"),
+                    mesh: MeshType::Fluid,
+                    transparency: TransparencyType::Translucent,
                 },
             ])),
             Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone(), vec![
@@ -197,6 +209,7 @@ impl MatrixagonApp {
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_flora.png"),
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/grass_top.png"),
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/flower.png"),
+                Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/water.png"),
             ])),
             Box::new(DebugUI::new(handler.vi.clone(), handler.device.clone(), init_raw_input)),
         ]);

@@ -54,8 +54,6 @@ pub(crate) struct ChunkMesh<G: ChunkGeneratable> {
     chunk_radius: i32,
 
     generator: G,
-    // chunks: Vec<Chunk<P>>,
-    // chunk_adjacency: Vec<ChunkAdjaceny>,
     chunks: HashMap<ChunkPosition, Chunk<G::P>>,
     chunk_adjacency: Vec<ChunkAdjacency>,
 }

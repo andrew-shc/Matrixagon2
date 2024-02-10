@@ -27,7 +27,25 @@ pub(crate) enum FaceDir {
 #[derive(Copy, Clone, Debug)]
 pub enum MeshType {
     Cube,
-    XCross
+    XCross,
+    Fluid
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum TransparencyType {
+    Opaque,
+    Transparent,  // full opacity or no opacity
+    Translucent,  // partial opacity
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum BlockCullType {
+    Empty,
+    AlwaysVisible(Block),  // always visible (not culled) regardless of any adjacent condition
+    BorderVisible(Block),  // visible only if any of its adjacent side is Empty|AlwaysVisible|BorderVisibleFluid|ObscuredFluid
+    BorderVisibleFluid(Block),  // visible only if any of its adjacent side is Empty|AlwaysVisible
+    Obscured,  // when BorderVisible is surrounded by other BorderVisible|Obscured
+    ObscuredFluid,  // when BorderVisibleFluid is surrounded by other BorderVisible|BorderVisibleFluid|Obscured|ObscuredFluid
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -97,18 +115,11 @@ pub struct BlockData<'s> {
     pub ident: &'s str,
     pub texture_id: TextureMapper<'s>,
     pub mesh: MeshType,
+    pub transparency: TransparencyType,
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct Block(u16);
-
-#[derive(Copy, Clone)]
-pub enum BlockCullType {
-    Empty,
-    Transparent(Block),
-    Opaque(Block),
-    Obscured,
-}
 
 
 pub(crate) struct Terrain<'b> {

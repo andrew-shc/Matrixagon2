@@ -19,13 +19,17 @@ pub struct ChunkRasterizer {
     device: Rc<Device>,
     extent: vk::Extent2D,
     renderpass: vk::RenderPass,
+
     gfxs_pipeline: vk::Pipeline,
     transparent_gfxs_pipeline: vk::Pipeline,
+    translucent_fluid_gfxs_pipeline: vk::Pipeline,
 
     terrain_vbo: Option<(vk::Buffer, vk::DeviceMemory)>,
     terrain_ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
     transparent_vbo: Option<(vk::Buffer, vk::DeviceMemory)>,
     transparent_ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
+    translucent_fluid_vbo: Option<(vk::Buffer, vk::DeviceMemory)>,
+    translucent_fluid_ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
 
     descriptor: DescriptorManager,
 
@@ -61,6 +65,12 @@ impl ChunkRasterizer {
             device.clone(), vec![
                 ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.vert", vk::ShaderStageFlags::VERTEX),
                 ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_transparent.frag", vk::ShaderStageFlags::FRAGMENT),
+            ]);
+
+        let (translucent_fluid_shader_stages, translucent_fluid_shader_modules) = gen_shader_modules_info(
+            device.clone(), vec![
+                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.vert", vk::ShaderStageFlags::VERTEX),
+                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_translucent.frag", vk::ShaderStageFlags::FRAGMENT),
             ]);
 
         let vertex_inp_info = get_vertex_inp!(ChunkVertex;
@@ -271,10 +281,34 @@ impl ChunkRasterizer {
             ..Default::default()
         };
 
-        let gfxs_pipeline = device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info, transparent_pipeline_info], None).unwrap();
+        let translucent_fluid_pipeline_info = vk::GraphicsPipelineCreateInfo {
+            stage_count: 2,
+            p_stages: translucent_fluid_shader_stages.as_ptr(),
+            p_vertex_input_state: &vertex_inp_info,
+            p_input_assembly_state: &input_assembly_info,
+            p_viewport_state: &viewport_state_info,
+            p_rasterization_state: &transparent_rasterizer_info,
+            p_multisample_state: &multisampling_info,
+            p_depth_stencil_state: &depth_stencil,
+            p_color_blend_state: &color_blend_info,
+            p_dynamic_state: &dynamic_state_info,
+
+            layout: descriptor.pipeline_layout,
+            render_pass: renderpass,
+            subpass: 0,
+            ..Default::default()
+        };
+
+        let gfxs_pipeline = device.create_graphics_pipelines(
+            vk::PipelineCache::null(),
+            &[pipeline_info, transparent_pipeline_info, translucent_fluid_pipeline_info],
+            None
+        )
+            .unwrap();
 
         destroy_shader_modules(device.clone(), shader_modules);
         destroy_shader_modules(device.clone(), transparent_shader_modules);
+        destroy_shader_modules(device.clone(), translucent_fluid_shader_modules);
 
         Self {
             // transparency_sub_shader: ChunkTransparencyRasterizerSubShader::new(),
@@ -286,8 +320,10 @@ impl ChunkRasterizer {
             renderpass,
             gfxs_pipeline: gfxs_pipeline[0],
             transparent_gfxs_pipeline: gfxs_pipeline[1],
+            translucent_fluid_gfxs_pipeline: gfxs_pipeline[2],
             terrain_vbo: None, terrain_ibo: None,
             transparent_vbo: None, transparent_ibo: None,
+            translucent_fluid_vbo: None, translucent_fluid_ibo: None,
             descriptor,
         }
     }
@@ -332,7 +368,7 @@ impl Shader for ChunkRasterizer {
 
     fn recreate_buffer(&mut self, render_data: RenderData) {
         match render_data {
-            RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainVertices) => unsafe {
+            RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainOpaque) => unsafe {
                 println!("RECREATE [OPAQUE/DEFAULT] VERTEX BUFFER");
                 if let Some((old_buf, old_mem)) = self.terrain_vbo {
                     self.device.device_wait_idle().unwrap();
@@ -341,7 +377,7 @@ impl Shader for ChunkRasterizer {
                 }
                 self.terrain_vbo = Some((buf, mem));
             }
-            RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainVertices) => unsafe {
+            RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainOpaque) => unsafe {
                 println!("RECREATE [OPAQUE/DEFAULT] INDEX BUFFER");
                 if let Some((old_buf, old_mem, _)) = self.terrain_ibo {
                     self.device.device_wait_idle().unwrap();
@@ -350,7 +386,7 @@ impl Shader for ChunkRasterizer {
                 }
                 self.terrain_ibo = Some((buf, mem, len));
             }
-            RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TransparentVertices) => unsafe {
+            RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainTransparent) => unsafe {
                 println!("RECREATE [TRANSPARENT] VERTEX BUFFER");
                 if let Some((old_buf, old_mem)) = self.transparent_vbo {
                     self.device.device_wait_idle().unwrap();
@@ -359,7 +395,7 @@ impl Shader for ChunkRasterizer {
                 }
                 self.transparent_vbo = Some((buf, mem));
             }
-            RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TransparentVertices) => unsafe {
+            RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainTransparent) => unsafe {
                 println!("RECREATE [TRANSPARENT] INDEX BUFFER");
                 if let Some((old_buf, old_mem, _)) = self.transparent_ibo {
                     self.device.device_wait_idle().unwrap();
@@ -367,6 +403,24 @@ impl Shader for ChunkRasterizer {
                     self.device.free_memory(old_mem, None);
                 }
                 self.transparent_ibo = Some((buf, mem, len));
+            }
+            RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainTranslucent) => unsafe {
+                println!("RECREATE [TRANSLUCENT] VERTEX BUFFER");
+                if let Some((old_buf, old_mem)) = self.translucent_fluid_vbo {
+                    self.device.device_wait_idle().unwrap();
+                    self.device.destroy_buffer(old_buf, None);
+                    self.device.free_memory(old_mem, None);
+                }
+                self.translucent_fluid_vbo = Some((buf, mem));
+            }
+            RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainTranslucent) => unsafe {
+                println!("RECREATE [TRANSLUCENT] INDEX BUFFER");
+                if let Some((old_buf, old_mem, _)) = self.translucent_fluid_ibo {
+                    self.device.device_wait_idle().unwrap();
+                    self.device.destroy_buffer(old_buf, None);
+                    self.device.free_memory(old_mem, None);
+                }
+                self.translucent_fluid_ibo = Some((buf, mem, len));
             }
             // TODO: DEBUG UI SENSITIVE
             RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::DebugUI) => unsafe {
@@ -395,8 +449,16 @@ impl Shader for ChunkRasterizer {
     }
 
     unsafe fn draw_command(&self, cmd_buf: vk::CommandBuffer, framebuffer: vk::Framebuffer) {
-        if let (Some(terrain_vbo), Some(terrain_ibo), Some(transparent_vbo), Some(transparent_ibo))
-            = (self.terrain_vbo, self.terrain_ibo, self.transparent_vbo, self.transparent_ibo) {
+        if let (
+            Some(terrain_vbo), Some(terrain_ibo),
+            Some(transparent_vbo), Some(transparent_ibo),
+            Some(translucent_fluid_vbo), Some(translucent_fluid_ibo),
+        )
+            = (
+            self.terrain_vbo, self.terrain_ibo,
+            self.transparent_vbo, self.transparent_ibo,
+            self.translucent_fluid_vbo, self.translucent_fluid_ibo
+        ) {
             let renderpass_info = vk::RenderPassBeginInfo::builder()
                 .render_pass(self.renderpass)
                 .framebuffer(framebuffer)
@@ -428,16 +490,19 @@ impl Shader for ChunkRasterizer {
             self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.gfxs_pipeline);
 
             // opaque objects
-            // self.device.cmd_set_cull_mode(cmd_buf, vk::CullModeFlags::BACK);
             self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[terrain_vbo.0], &[0]);
             self.device.cmd_bind_index_buffer(cmd_buf, terrain_ibo.0, 0, vk::IndexType::UINT32);
             self.device.cmd_draw_indexed(cmd_buf, terrain_ibo.2, 1, 0, 0, 0);
             // transparent objects
-            // self.device.cmd_set_cull_mode(cmd_buf, vk::CullModeFlags::NONE);
             self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.transparent_gfxs_pipeline);
             self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[transparent_vbo.0], &[0]);
             self.device.cmd_bind_index_buffer(cmd_buf, transparent_ibo.0, 0, vk::IndexType::UINT32);
             self.device.cmd_draw_indexed(cmd_buf, transparent_ibo.2, 1, 0, 0, 0);
+            // translucent objects
+            self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.translucent_fluid_gfxs_pipeline);
+            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[translucent_fluid_vbo.0], &[0]);
+            self.device.cmd_bind_index_buffer(cmd_buf, translucent_fluid_ibo.0, 0, vk::IndexType::UINT32);
+            self.device.cmd_draw_indexed(cmd_buf, translucent_fluid_ibo.2, 1, 0, 0, 0);
 
             self.debug_ui_sub_shader.draw_pipeline(cmd_buf, &self.descriptor);
 
@@ -467,8 +532,18 @@ impl Shader for ChunkRasterizer {
             self.device.free_memory(old_mem, None);
         }
 
+        if let Some((old_buf, old_mem)) = self.translucent_fluid_vbo {
+            self.device.destroy_buffer(old_buf, None);
+            self.device.free_memory(old_mem, None);
+        }
+        if let Some((old_buf, old_mem, _)) = self.translucent_fluid_ibo {
+            self.device.destroy_buffer(old_buf, None);
+            self.device.free_memory(old_mem, None);
+        }
+
         self.device.destroy_pipeline(self.gfxs_pipeline, None);
         self.device.destroy_pipeline(self.transparent_gfxs_pipeline, None);
+        self.device.destroy_pipeline(self.translucent_fluid_gfxs_pipeline, None);
         self.descriptor.destroy();
         self.device.destroy_render_pass(self.renderpass, None);
     }

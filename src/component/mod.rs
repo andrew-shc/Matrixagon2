@@ -13,17 +13,13 @@ use crate::world::{WorldEvent};
 pub enum RenderDataPurpose {
     CameraViewProjection,
     BlockTextures,
-    TerrainVertices,
-    TransparentVertices,
+    TerrainOpaque,
+    TerrainTransparent,
+    TerrainTranslucent,
     PresentationInpAttachment,
     DebugUI,
     DebugUIInpAttachment,
 }
-
-// TODO: initial render data & update render data
-// pub enum RenderInputConfig {
-//     VertexInputConfig,
-// }
 
 
 // this enum should rarely be modified for new buffer types
@@ -50,8 +46,3 @@ pub trait Component {
     unsafe fn load_descriptors(&mut self, _: CmdBufContext) -> Vec<RenderData> {Vec::new()}
     unsafe fn destroy(&mut self) {}
 }
-
-// TODO: remove
-// optionally emit new events and whether the component should render again
-#[derive(Default)]
-pub struct ComponentEventResponse(pub(crate) Vec<WorldEvent>, pub(crate) bool);

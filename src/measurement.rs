@@ -6,7 +6,7 @@ unit! {
     quantity: uom::si::length;
 
     @blox: 1.0; "bx", "block", "blocks";
-    @chux: 64.0; "cx", "chunk", "chunks";
+    @chux: 32.0; "cx", "chunk", "chunks";
 }
 
 // chux should be at 64.0 per blox
