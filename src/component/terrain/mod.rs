@@ -185,7 +185,7 @@ impl Component for Terrain<'static> {
                         y: Length::new::<chux>(1.0),
                         z: Length::new::<chux>(1.0),
                     },
-                    2,
+                    4, 2,
                     block_generator,
                 );
 

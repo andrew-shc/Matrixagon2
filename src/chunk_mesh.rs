@@ -51,7 +51,9 @@ impl ChunkPosition {
 pub(crate) struct ChunkMesh<G: ChunkGeneratable> {
     pub(crate) central_pos: Length3D,
     chunk_size: Length3D,
-    chunk_radius: i32,
+    chunk_radius: i32,  // border rendering radius
+    chunk_update_radius: f32,  // inner updating radius (when the player reaches beyond it, it will update the chunk)
+    // inner radius should be more than 0, or else it will keep updating and rebuilding mesh (disaster) and quite useless too
 
     generator: G,
     chunks: HashMap<ChunkPosition, Chunk<G::P>>,
@@ -59,11 +61,12 @@ pub(crate) struct ChunkMesh<G: ChunkGeneratable> {
 }
 
 impl<G: ChunkGeneratable> ChunkMesh<G> {
-    pub(crate) fn new(pos: Length3D, size: Length3D, chunk_radius: u32, generator: G) -> Self {
+    pub(crate) fn new(pos: Length3D, size: Length3D, chunk_radius: u32, inner_radius: u32, generator: G) -> Self {
         Self {
             central_pos: pos,
             chunk_size: size,
             chunk_radius: chunk_radius as i32,
+            chunk_update_radius: inner_radius as f32,
             generator,
             chunks: HashMap::new(),
             chunk_adjacency: Vec::new(),
@@ -93,29 +96,29 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
         let mut pos_changed = false;
         let mut chunk_changed = false;
 
-        if pos.x.floor::<chux>() < self.central_pos.x-Length::new::<chux>(1.0) {
+        if pos.x.floor::<chux>() < self.central_pos.x-Length::new::<chux>(self.chunk_update_radius) {
             // println!("NEW CHUNK LOAD -X");
             self.central_pos.x -= Length::new::<chux>(1.0);
             pos_changed = true;
-        } else if self.central_pos.x < pos.x.floor::<chux>() {
+        } else if self.central_pos.x+Length::new::<chux>(self.chunk_update_radius-1.0) < pos.x.floor::<chux>() {
             // println!("NEW CHUNK LOAD +X");
             self.central_pos.x += Length::new::<chux>(1.0);
             pos_changed = true;
         }
-        if pos.y.floor::<chux>() < self.central_pos.y-Length::new::<chux>(1.0) {
+        if pos.y.floor::<chux>() < self.central_pos.y-Length::new::<chux>(self.chunk_update_radius) {
             // println!("NEW CHUNK LOAD -Y");
             self.central_pos.y -= Length::new::<chux>(1.0);
             pos_changed = true;
-        } else if self.central_pos.y < pos.y.floor::<chux>() {
+        } else if self.central_pos.y+Length::new::<chux>(self.chunk_update_radius-1.0) < pos.y.floor::<chux>() {
             // println!("NEW CHUNK LOAD +Y");
             self.central_pos.y += Length::new::<chux>(1.0);
             pos_changed = true;
         }
-        if pos.z.floor::<chux>() < self.central_pos.z-Length::new::<chux>(1.0) {
+        if pos.z.floor::<chux>() < self.central_pos.z-Length::new::<chux>(self.chunk_update_radius) {
             // println!("NEW CHUNK LOAD -Z");
             self.central_pos.z -= Length::new::<chux>(1.0);
             pos_changed = true;
-        } else if self.central_pos.z < pos.z.floor::<chux>() {
+        } else if self.central_pos.z+Length::new::<chux>(self.chunk_update_radius-1.0) < pos.z.floor::<chux>() {
             // println!("NEW CHUNK LOAD +Z");
             self.central_pos.z += Length::new::<chux>(1.0);
             pos_changed = true;
@@ -123,6 +126,8 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
 
         if pos_changed {  // chunk position changed, update what chunks needs to be loaded
             // println!("CENTRAL POS {:?}", self.central_pos);
+            self.reset_chunk_visibility();
+
             for cx in -self.chunk_radius..self.chunk_radius {
                 for cy in -self.chunk_radius..self.chunk_radius {
                     for cz in -self.chunk_radius..self.chunk_radius {
@@ -132,7 +137,10 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
                             Length::new::<chux>(cz as f32)+self.central_pos.z,
                         );
 
-                        if let None = self.chunks.get(&ChunkPosition::from(new_chunk_pos)) {
+                        if let Some(chunk) = self.chunks.get_mut(&ChunkPosition::from(new_chunk_pos)) {
+                            chunk.visible = true;
+                            chunk_changed = true;
+                        } else {
                             // chunk at new_chunk_pos does not exist (needs to be created)
 
                             // println!("New chunk loaded [{} {} {}]",
@@ -150,6 +158,12 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
             chunk_changed
         } else {
             false
+        }
+    }
+
+    fn reset_chunk_visibility(&mut self) {
+        for v in self.chunks.values_mut() {
+            v.visible = false;
         }
     }
 
@@ -204,12 +218,15 @@ pub(crate) struct Chunk<P> {
     pub(crate) pos: Length3D,  // south-west corner of the chunk TODO
     pub(crate) hash_pos: ChunkPosition,
     pub(crate) adjacency: ChunkAdjacency,
+    visible: bool,
 }
 
 impl<P> Chunk<P> {
     pub(crate) fn new(pos: Length3D, hash_pos: ChunkPosition, voxels: Box<[P]>, init_adjs: ChunkAdjacency) -> Self {
         Self {
-            voxels, pos, hash_pos, adjacency: init_adjs,
+            voxels, pos, visible: true, hash_pos, adjacency: init_adjs,
         }
     }
+
+    pub(crate) fn visible(&self) -> bool {self.visible}
 }

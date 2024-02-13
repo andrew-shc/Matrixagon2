@@ -275,7 +275,7 @@ impl ChunkGeneratable for BlockGenerator<'_> {
         let mut translucent_inds = vec![];
         let mut translucent_faces = 0;
 
-        for chunk in chunks.values() {
+        for chunk in chunks.values().filter(|c| c.visible()) {
             let chunk_pos = |x: u32, y: u32, z: u32| (
                 chunk.pos.x.get::<blox>()+x as f32,
                 chunk.pos.y.get::<blox>()+y as f32,
