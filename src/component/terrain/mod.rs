@@ -1,16 +1,19 @@
-mod block_gen;
+mod chunk_gen;
+mod chunk_gen_hf;
+mod chunk_gen_mf;
+mod mesh_util;
 
 use std::rc::Rc;
 use ash::{Device, vk};
 use noise::NoiseFn;
 use uom::si::f32::Length;
 use winit::event::VirtualKeyCode;
-use crate::chunk_mesh::ChunkMesh;
+use crate::chunk_mesh::{ChunkGeneratable, ChunkMesh};
 use crate::component::{Component, RenderData};
 use crate::component::camera::Length3D;
-use crate::component::terrain::block_gen::BlockGenerator;
+use crate::component::terrain::chunk_gen::BlockGenerator;
 use crate::handler::VulkanInstance;
-use crate::measurement::{blox, chux};
+use crate::measurement::{blox, chux, chux_hf, chux_mf};
 use crate::util::{CmdBufContext, create_host_buffer, create_local_buffer};
 use crate::world::WorldEvent;
 
@@ -179,11 +182,6 @@ impl Component for Terrain<'static> {
                         x: Length::new::<blox>(0.0),
                         y: Length::new::<blox>(0.0),
                         z: Length::new::<blox>(0.0),
-                    },
-                    Length3D {
-                        x: Length::new::<chux>(1.0),
-                        y: Length::new::<chux>(1.0),
-                        z: Length::new::<chux>(1.0),
                     },
                     4, 2,
                     block_generator,

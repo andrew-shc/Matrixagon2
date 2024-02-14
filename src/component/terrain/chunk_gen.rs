@@ -5,8 +5,9 @@ use crate::chunk_mesh::{Chunk, ChunkPosition, ChunkGeneratable};
 use crate::component::camera::Length3D;
 use crate::component::RenderDataPurpose;
 use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir, MeshType, TextureMapper, TransparencyType};
+use crate::component::terrain::mesh_util::{ChunkMeshUtil};
 use crate::component::texture::TextureIDMapper;
-use crate::measurement::blox;
+use crate::measurement::{blox, chux};
 use crate::shader::chunk::ChunkVertex;
 
 pub(super) struct BlockGenerator<'b> {
@@ -21,172 +22,30 @@ impl<'b> BlockGenerator<'b> {
     const SEA_LEVEL: f64 = 10.0;
     const SAND_LEVEL: f64 = 13.0;
 
-    pub(crate) fn new(chunk_size: u32, block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper,) -> Self {
+    pub(super) fn new(chunk_size: u32, block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper,) -> Self {
         Self {
             chunk_size, block_ind, txtr_id_mapper, noise: Perlin::new(50), floral_noise: Perlin::new(23),
         }
     }
+}
 
-    fn access(&self, x: u32, y: u32, z: u32) -> usize {
-        (y*self.chunk_size*self.chunk_size+x*self.chunk_size+z) as usize
-    }
+impl ChunkMeshUtil for BlockGenerator<'_> {
+    fn chunk_size(&self) -> u32 {self.chunk_size}
 
-    fn check_block_obscured(block: BlockCullType) -> bool {
-        // matches!(&block, &BlockCullType::Obscured)
-        mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisible(Block::default())) ||
-            mem::discriminant(&block) == mem::discriminant(&BlockCullType::Obscured)
-    }
-
-    fn check_fluid_obscured(block: BlockCullType) -> bool {
-        // matches!(&block, &BlockCullType::ObscuredFluid) ||
-        //     matches!(&block, &BlockCullType::BorderVisible(_)) ||
-        //     matches!(&block, &BlockCullType::Obscured)
-        mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisibleFluid(Block::default())) ||
-        mem::discriminant(&block) == mem::discriminant(&BlockCullType::ObscuredFluid) ||
-        mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisible(Block::default())) ||
-        mem::discriminant(&block) == mem::discriminant(&BlockCullType::Obscured)
-    }
-
-    fn check_coord_within_chunk(&self, x: u32, y: u32, z: u32) -> bool {
-        0 <= x && x < self.chunk_size && 0 <= y && y < self.chunk_size && 0 <= z && z < self.chunk_size
-    }
-
-    fn gen_face(&self, loc: (f32, f32, f32), ind_ofs: u32, face: FaceDir, txtr_mapping: TextureMapper, fluid: bool) -> (Vec<ChunkVertex>, Vec<u32>) {
-        let txtr_mapper = |name: &str| *self.txtr_id_mapper.get(name).unwrap_or(&0) as f32;
-
-        // TODO: encode indent height into the shader itself
-        let hgt = if fluid {
-            0.9
-        } else {
-            1.0
-        };
-
-        let (v, i) = match face {
-            FaceDir::FRONT => {
-                let txtr = txtr_mapper(txtr_mapping.front());
-
-                (
-                    vec![
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2+0.0], uv: [0.0, 0.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2+0.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2+0.0], uv: [1.0, 0.0], txtr },
-                    ],
-                    vec![0,1,2,3,1,0]
-                )
-            }
-            FaceDir::RIGHT => {
-                let txtr = txtr_mapper(txtr_mapping.right());
-
-                (
-                    vec![
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2+0.0], uv: [1.0, 0.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2-1.0], uv: [0.0, 0.0], txtr },
-                    ],
-                    vec![0,2,1,3,1,2]
-                )}
-            FaceDir::BACK => {
-                let txtr = txtr_mapper(txtr_mapping.back());
-
-                (
-                    vec![
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2-1.0], uv: [0.0, 0.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2-1.0], uv: [1.0, 0.0], txtr },
-                    ],
-                    vec![1,0,3,2,3,0]
-                )}
-            FaceDir::LEFT => {
-                let txtr = txtr_mapper(txtr_mapping.left());
-
-                (
-                    vec![
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2+0.0], uv: [1.0, 0.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2-1.0], uv: [0.0, 0.0], txtr },
-                    ],
-                    vec![2,0,3,1,3,0]
-                )}
-            FaceDir::TOP => {
-                let txtr = txtr_mapper(txtr_mapping.top());
-
-                (
-                    vec![
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2+0.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+hgt, -loc.2-1.0], uv: [1.0, 0.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+hgt, -loc.2-1.0], uv: [0.0, 0.0], txtr },
-                    ],
-                    vec![0,1,2,3,2,1]
-                )}
-            FaceDir::BOTTOM => {
-                let txtr = txtr_mapper(txtr_mapping.bottom());
-
-                (
-                    vec![
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2+0.0], uv: [0.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-                        ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 0.0], txtr },
-                        ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [1.0, 0.0], txtr },
-                    ],
-                    vec![1,0,3,2,3,0]
-                )}
-        };
-        let i = i.into_iter()
-            .map(|ind| ind+ind_ofs)
-            .collect();
-        (v,i)
-    }
-
-    fn gen_xcross(&self, loc: (f32, f32, f32), ind_ofs: u32, txtr_mapping: TextureMapper) -> (Vec<ChunkVertex>, Vec<u32>) {
-        let txtr_mapper = |name: &str| *self.txtr_id_mapper.get(name).unwrap_or(&0) as f32;
-        let txtr = txtr_mapper(txtr_mapping.default());
-
-        let v = [
-            // -x +z to +x -z
-            ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-            ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 0.0], txtr },
-            ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0], txtr },
-            ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0], txtr },
-
-            // +x +z to -x -z
-            ChunkVertex { pos: [loc.0+1.0, loc.1+0.0, -loc.2+0.0], uv: [1.0, 1.0], txtr },
-            ChunkVertex { pos: [loc.0+1.0, loc.1+1.0, -loc.2+0.0], uv: [1.0, 0.0], txtr },
-            ChunkVertex { pos: [loc.0+0.0, loc.1+0.0, -loc.2-1.0], uv: [0.0, 1.0], txtr },
-            ChunkVertex { pos: [loc.0+0.0, loc.1+1.0, -loc.2-1.0], uv: [0.0, 0.0], txtr },
-        ];
-        let i = [
-            0,1,2,2,1,3,
-            4,5,6,6,5,7,
-        ];
-
-        let i = i.into_iter()
-            .map(|ind| ind+ind_ofs)
-            .collect();
-        (v.to_vec(),i)
-    }
+    fn texture_id_mapper(&self) -> TextureIDMapper {self.txtr_id_mapper.clone()}
 }
 
 impl ChunkGeneratable for BlockGenerator<'_> {
+    type M = chux;
     type P = BlockCullType;
     type V = ChunkVertex;
     type I = u32;
 
     fn generate_chunk(&self, pos: Length3D) -> Box<[Self::P]> {
-        let coord = |i: f32| {
-            let y = (i/(self.chunk_size as f32*self.chunk_size as f32)).floor();
-            let x = ((i-y*self.chunk_size as f32*self.chunk_size as f32)/self.chunk_size as f32).floor();
-            let z = (i-y*self.chunk_size as f32*self.chunk_size as f32) % self.chunk_size as f32;
-            (x as f64+pos.x.get::<blox>() as f64, y as f64+pos.y.get::<blox>() as f64, z as f64+pos.z.get::<blox>() as f64)
-        };
         let mut voxel = (0..self.chunk_size*self.chunk_size*self.chunk_size)
             .into_iter()
             .map(|i| {
-                let (x,y,z) = coord(i as f32);
+                let (x,y,z) = self.reverse_access(pos, i as f32);
                 // TERRAIN GENERATION (NO SIDE EFFECT)
 
                 let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
@@ -233,38 +92,42 @@ impl ChunkGeneratable for BlockGenerator<'_> {
             })
             .collect::<Box<[BlockCullType]>>();
 
-        for x in 1..self.chunk_size-1 {
-            for y in 1..self.chunk_size-1 {
-                for z in 1..self.chunk_size-1 {
-                    match voxel[self.access(x,y,z)] {
-                        BlockCullType::BorderVisible(_) if
-                            Self::check_block_obscured(voxel[self.access(x+1,y,z)]) &&
-                            Self::check_block_obscured(voxel[self.access(x-1,y,z)]) &&
-                            Self::check_block_obscured(voxel[self.access(x,y+1,z)]) &&
-                            Self::check_block_obscured(voxel[self.access(x,y-1,z)]) &&
-                            Self::check_block_obscured(voxel[self.access(x,y,z+1)]) &&
-                            Self::check_block_obscured(voxel[self.access(x,y,z-1)]) => {
-                            voxel[self.access(x,y,z)] = BlockCullType::Obscured;
-                        }
-                        BlockCullType::BorderVisibleFluid(_) if
-                            Self::check_fluid_obscured(voxel[self.access(x+1,y,z)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x-1,y,z)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x,y+1,z)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x,y-1,z)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x,y,z+1)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x,y,z-1)]) => {
-                            voxel[self.access(x,y,z)] = BlockCullType::ObscuredFluid;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
+        self.block_culling(&mut voxel);
+
+        // for x in 1..self.chunk_size-1 {
+        //     for y in 1..self.chunk_size-1 {
+        //         for z in 1..self.chunk_size-1 {
+        //             match voxel[self.access(x,y,z)] {
+        //                 BlockCullType::BorderVisible(_) if
+        //                     Self::check_block_obscured(voxel[self.access(x+1,y,z)]) &&
+        //                     Self::check_block_obscured(voxel[self.access(x-1,y,z)]) &&
+        //                     Self::check_block_obscured(voxel[self.access(x,y+1,z)]) &&
+        //                     Self::check_block_obscured(voxel[self.access(x,y-1,z)]) &&
+        //                     Self::check_block_obscured(voxel[self.access(x,y,z+1)]) &&
+        //                     Self::check_block_obscured(voxel[self.access(x,y,z-1)]) => {
+        //                     voxel[self.access(x,y,z)] = BlockCullType::Obscured;
+        //                 }
+        //                 BlockCullType::BorderVisibleFluid(_) if
+        //                     Self::check_fluid_obscured(voxel[self.access(x+1,y,z)]) &&
+        //                     Self::check_fluid_obscured(voxel[self.access(x-1,y,z)]) &&
+        //                     Self::check_fluid_obscured(voxel[self.access(x,y+1,z)]) &&
+        //                     Self::check_fluid_obscured(voxel[self.access(x,y-1,z)]) &&
+        //                     Self::check_fluid_obscured(voxel[self.access(x,y,z+1)]) &&
+        //                     Self::check_fluid_obscured(voxel[self.access(x,y,z-1)]) => {
+        //                     voxel[self.access(x,y,z)] = BlockCullType::ObscuredFluid;
+        //                 }
+        //                 _ => {}
+        //             }
+        //         }
+        //     }
+        // }
 
         voxel
     }
 
-    fn generate_mesh(&self, chunks: &HashMap<ChunkPosition, Chunk<Self::P>>) -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)> {
+    fn generate_mesh(&self, chunks: &HashMap<ChunkPosition<Self::M>, Chunk<Self::P, Self::M>>)
+        -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>
+    {
         let mut opaque_verts = vec![];
         let mut opaque_inds = vec![];
         let mut opaque_faces = 0;
