@@ -4,19 +4,19 @@ use crate::chunk_mesh::{Chunk, ChunkGeneratable, ChunkPosition};
 use crate::component::camera::Length3D;
 use crate::component::RenderDataPurpose;
 use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir, MeshType, TransparencyType};
-use crate::component::terrain::chunk_gen::BlockGenerator;
+use crate::component::terrain::chunk_gen::ChunkGeneratorEF;
 use crate::component::terrain::mesh_util::ChunkMeshUtil;
 use crate::component::texture::TextureIDMapper;
 use crate::measurement::{blox, chux_hf};
 use crate::shader::chunk::ChunkVertex;
 
-pub(super) struct BlockGeneratorHF<'b> {
+pub(super) struct ChunkGeneratorHF<'b> {
     chunk_size: u32,
     block_ind: Vec<BlockData<'b>>,
     txtr_id_mapper: TextureIDMapper,
 }
 
-impl<'b> BlockGeneratorHF<'b> {
+impl<'b> ChunkGeneratorHF<'b> {
     pub(super) fn new(chunk_size: u32, block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper,) -> Self {
         Self {
             chunk_size, block_ind, txtr_id_mapper
@@ -24,13 +24,13 @@ impl<'b> BlockGeneratorHF<'b> {
     }
 }
 
-impl ChunkMeshUtil for BlockGeneratorHF<'_> {
+impl ChunkMeshUtil for ChunkGeneratorHF<'_> {
     fn chunk_size(&self) -> u32 {self.chunk_size}
 
     fn texture_id_mapper(&self) -> TextureIDMapper {self.txtr_id_mapper.clone()}
 }
 
-impl ChunkGeneratable for BlockGeneratorHF<'_> {
+impl ChunkGeneratable for ChunkGeneratorHF<'_> {
     type M = chux_hf;
     type P = BlockCullType;
     type V = ChunkVertex;

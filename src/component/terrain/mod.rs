@@ -11,7 +11,8 @@ use winit::event::VirtualKeyCode;
 use crate::chunk_mesh::{ChunkGeneratable, ChunkMesh};
 use crate::component::{Component, RenderData};
 use crate::component::camera::Length3D;
-use crate::component::terrain::chunk_gen::BlockGenerator;
+use crate::component::terrain::chunk_gen::ChunkGeneratorEF;
+use crate::component::terrain::chunk_gen_hf::ChunkGeneratorHF;
 use crate::handler::VulkanInstance;
 use crate::measurement::{blox, chux, chux_hf, chux_mf};
 use crate::util::{CmdBufContext, create_host_buffer, create_local_buffer};
@@ -133,7 +134,9 @@ pub(crate) struct Terrain<'b> {
 
     block_ind: Vec<BlockData<'b>>,
 
-    chunk_mesh: Option<ChunkMesh<BlockGenerator<'b>>>,
+    chunk_mesh_ef: Option<ChunkMesh<ChunkGeneratorEF<'b>>>,
+    chunk_mesh_mf: Option<ChunkMesh<ChunkGeneratorHF<'b>>>,
+    chunk_mesh_hf: Option<ChunkMesh<ChunkGeneratorHF<'b>>>,
     to_render: Vec<RenderData>,
     chunk_update: bool,
 
@@ -149,7 +152,9 @@ impl<'b> Terrain<'b> {
         Self {
             vi, device, ctx: ctx.clone(),
             block_ind,
-            chunk_mesh: None,
+            chunk_mesh_ef: None,
+            chunk_mesh_mf: None,
+            chunk_mesh_hf: None,
             to_render: vec![],
             chunk_update: true,
             chunk_size,
@@ -167,29 +172,41 @@ impl Component for Terrain<'static> {
     fn respond_event(&mut self, event: WorldEvent) -> Vec<WorldEvent> {
         match event {
             WorldEvent::UserPosition(pos) if !self.spectator_mode => {
-                if let Some(ref mut chunk_mesh) = self.chunk_mesh {
+                if let Some(ref mut chunk_mesh) = self.chunk_mesh_mf {
                     let need_update = chunk_mesh.update(pos);
                     self.chunk_update = self.chunk_update || need_update;
                 }
             }
             WorldEvent::NewTextureMapper(txtr_mapper) => {
-                let block_generator = BlockGenerator::new(
-                    self.chunk_size, self.block_ind.clone(), txtr_mapper
-                );
 
-                let mut chunk_mesher = ChunkMesh::new(
+                let mut chunk_mesh_ef = ChunkMesh::new(
                     Length3D {
                         x: Length::new::<blox>(0.0),
                         y: Length::new::<blox>(0.0),
                         z: Length::new::<blox>(0.0),
                     },
                     4, 2,
-                    block_generator,
+                    ChunkGeneratorEF::new(
+                        self.chunk_size, self.block_ind.clone(), txtr_mapper.clone()
+                    ),
+                );
+                let mut chunk_mesh_hf = ChunkMesh::new(
+                    Length3D {
+                        x: Length::new::<blox>(0.0),
+                        y: Length::new::<blox>(0.0),
+                        z: Length::new::<blox>(0.0),
+                    },
+                    4, 2,
+                    ChunkGeneratorHF::new(
+                        self.chunk_size, self.block_ind.clone(), txtr_mapper.clone()
+                    ),
                 );
 
-                chunk_mesher.initialize();
+                chunk_mesh_ef.initialize();
+                chunk_mesh_hf.initialize();
 
-                self.chunk_mesh.replace(chunk_mesher);
+                self.chunk_mesh_ef.replace(chunk_mesh_ef);
+                self.chunk_mesh_hf.replace(chunk_mesh_hf);
             }
             WorldEvent::SpectatorMode(enabled) => {
                 self.spectator_mode = enabled;
@@ -202,9 +219,10 @@ impl Component for Terrain<'static> {
 
     fn update(&mut self) {
         self.to_render.clear();
-        if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh {
+        if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh_ef {
             if self.chunk_update {
                 for (verts, inds, purpose) in chunk_mesh.generate_vertices() {
+                    // TODO: aggregate all vertex & index (w/ proper ofs computed here) to a parent vector (verts, inds, purpose)
                     let (host_vbo, host_vmo, _, host_vbo_size) = unsafe {
                         create_host_buffer(self.vi.clone(), self.device.clone(), &verts, vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::VERTEX_BUFFER, true)
                     };

@@ -10,7 +10,7 @@ use crate::component::texture::TextureIDMapper;
 use crate::measurement::{blox, chux};
 use crate::shader::chunk::ChunkVertex;
 
-pub(super) struct BlockGenerator<'b> {
+pub(super) struct ChunkGeneratorEF<'b> {
     chunk_size: u32,
     block_ind: Vec<BlockData<'b>>,
     txtr_id_mapper: TextureIDMapper,
@@ -18,7 +18,7 @@ pub(super) struct BlockGenerator<'b> {
     floral_noise: Perlin,
 }
 
-impl<'b> BlockGenerator<'b> {
+impl<'b> ChunkGeneratorEF<'b> {
     const SEA_LEVEL: f64 = 10.0;
     const SAND_LEVEL: f64 = 13.0;
 
@@ -29,13 +29,13 @@ impl<'b> BlockGenerator<'b> {
     }
 }
 
-impl ChunkMeshUtil for BlockGenerator<'_> {
+impl ChunkMeshUtil for ChunkGeneratorEF<'_> {
     fn chunk_size(&self) -> u32 {self.chunk_size}
 
     fn texture_id_mapper(&self) -> TextureIDMapper {self.txtr_id_mapper.clone()}
 }
 
-impl ChunkGeneratable for BlockGenerator<'_> {
+impl ChunkGeneratable for ChunkGeneratorEF<'_> {
     type M = chux;
     type P = BlockCullType;
     type V = ChunkVertex;

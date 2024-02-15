@@ -2,7 +2,7 @@ use std::rc::Rc;
 use ash::{Device, vk};
 use ash::extensions::khr::Swapchain;
 use crate::debug::DebugVisibility;
-use crate::framebuffer::{AttachmentRef, FramebufferManager};
+use crate::framebuffer::{FBAttachmentRef, FramebufferManager};
 use crate::handler::VulkanInstance;
 
 pub(crate) struct SwapchainManager {
@@ -22,13 +22,13 @@ pub(crate) struct SwapchainManager {
 
     // per renderpass
     renderpass: vk::RenderPass,
-    attachments: Vec<AttachmentRef>,
+    attachments: Vec<FBAttachmentRef>,
 }
 
 impl SwapchainManager {
     pub(crate) unsafe fn new(
         dbv: DebugVisibility, vi: Rc<VulkanInstance>, device: Rc<Device>,
-        renderpass: vk::RenderPass, attachments: Vec<AttachmentRef>, prsnt_inp: bool,
+        renderpass: vk::RenderPass, attachments: Vec<FBAttachmentRef>, prsnt_inp: bool,
     ) -> Self {
         // prsnt_inp: make the presentation attachment also an input attachment
 

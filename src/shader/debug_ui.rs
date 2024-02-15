@@ -4,7 +4,7 @@ use ash::{Device, vk};
 use egui::epaint::Vertex;
 use crate::component::RenderData;
 use crate::{get_vertex_inp};
-use crate::shader::{DescriptorManager, destroy_shader_modules, gen_shader_modules_info};
+use crate::shader::{DescriptorManager, destroy_shader_modules, gen_shader_modules_info, standard_graphics_pipeline, StandardGraphicsPipelineInfo, transparent_cba};
 
 
 pub struct DebugUISubShader {
@@ -27,94 +27,34 @@ impl DebugUISubShader {
                 ("C:/Users/andrewshen/documents/matrixagon2/src/shader/debug_ui.frag", vk::ShaderStageFlags::FRAGMENT),
             ]);
 
-        let vertex_inp_info = get_vertex_inp!(Vertex;
+        let vertex_input_state = get_vertex_inp!(Vertex;
             (vk::Format::R32G32_SFLOAT, pos),
             (vk::Format::R32G32_SFLOAT, uv),
             (vk::Format::R8G8B8A8_UNORM, color)
         );
 
-        let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::builder()
-            .dynamic_states(dynamic_states.as_slice())
-            .build();
-
-        let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
-            primitive_restart_enable: vk::FALSE,
-            ..Default::default()
-        };
-
-        let viewport_state_info = vk::PipelineViewportStateCreateInfo {
-            viewport_count: 1,
-            scissor_count: 1,
-            ..Default::default()
-        };
-
-        let rasterizer_info = vk::PipelineRasterizationStateCreateInfo {
-            depth_clamp_enable: vk::FALSE,
-            rasterizer_discard_enable: vk::FALSE,
-            polygon_mode: vk::PolygonMode::FILL,
-            line_width: 1.0,
-            cull_mode: vk::CullModeFlags::NONE,
-            depth_bias_enable: vk::FALSE,
-            ..Default::default()
-        };
-
-        let multisampling_info = vk::PipelineMultisampleStateCreateInfo {
-            sample_shading_enable: vk::FALSE,
-            rasterization_samples: vk::SampleCountFlags::TYPE_1,
-            ..Default::default()
-        };
-
-        let color_blend_attachement = vk::PipelineColorBlendAttachmentState {
-            color_write_mask: vk::ColorComponentFlags::R | vk::ColorComponentFlags::G |
-                vk::ColorComponentFlags::B | vk::ColorComponentFlags::A,
-            blend_enable: vk::TRUE,
-            src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
-            dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-            color_blend_op: vk::BlendOp::ADD,
-            src_alpha_blend_factor: vk::BlendFactor::SRC_ALPHA,
-            dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-            alpha_blend_op: vk::BlendOp::ADD,
-            ..Default::default()
-        };
-
-        let color_blend_info = vk::PipelineColorBlendStateCreateInfo {
-            logic_op_enable: vk::FALSE,
-            attachment_count: 1,
-            p_attachments: &color_blend_attachement,
-            blend_constants: [0.0, 0.0, 0.0, 0.0],
-            ..Default::default()
-        };
-
         // PIPELINE CREATION
 
-        let pipeline_info = vk::GraphicsPipelineCreateInfo {
-            stage_count: 2,
-            p_stages: shader_stages.as_ptr(),
-            p_vertex_input_state: &vertex_inp_info,
-            p_input_assembly_state: &input_assembly_info,
-            p_viewport_state: &viewport_state_info,
-            p_rasterization_state: &rasterizer_info,
-            p_multisample_state: &multisampling_info,
-            // p_depth_stencil_state: &depth_stencil,
-            p_color_blend_state: &color_blend_info,
-            p_dynamic_state: &dynamic_state_info,
+        let graphics_pipelines = standard_graphics_pipeline(
+            device.clone(),
+            vec![
+                StandardGraphicsPipelineInfo {
+                    shader_stages, vertex_input_state,
+                    back_face_culling: false, depth_testing: false,
+                    color_blend_attachment_state: vec![transparent_cba()],
+                },
+            ],
+            pipeline_layout, renderpass,
+        );
 
-            layout: pipeline_layout,
-            render_pass: renderpass,
-            subpass: 1,
-            ..Default::default()
-        };
-
-        let gfxs_pipeline = device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None).unwrap();
+        // let gfxs_pipeline = device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None).unwrap();
 
         destroy_shader_modules(device.clone(), shader_modules);
 
         Self {
             device: device.clone(),
             extent,
-            gfxs_pipeline: gfxs_pipeline[0],
+            gfxs_pipeline: graphics_pipelines[0],
 
             ui_vbo: None, ui_ibo: None, scissor: None,
         }

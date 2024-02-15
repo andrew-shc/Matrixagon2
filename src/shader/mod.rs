@@ -8,11 +8,11 @@ use std::rc::Rc;
 use ash::{Device, vk};
 use ash::util::read_spv;
 use crate::component::{RenderData};
-use crate::framebuffer::AttachmentRef;
+use crate::framebuffer::FBAttachmentRef;
 
 pub trait Shader {
     fn renderpass(&self) -> vk::RenderPass;
-    fn attachments(&self) -> Vec<AttachmentRef>;
+    fn attachments(&self) -> Vec<FBAttachmentRef>;
     unsafe fn write_descriptors(&mut self, descriptor_buffers: Vec<RenderData>);
     fn update_extent(&mut self, new_extent: vk::Extent2D);
     fn recreate_buffer(&mut self, render_data: RenderData);
@@ -24,16 +24,124 @@ pub trait Shader {
 // glslc has an option to compile shader to human readable bytecode
 
 
-// https://github.com/ash-rs/ash/blob/master/ash-examples/src/lib.rs
-#[macro_export]
-macro_rules! offset_of {  // Simple offset_of macro akin to C++ offsetof
-    ($base:path, $field:ident) => {{
-        #[allow(unused_unsafe)]
-        unsafe {
-            let b: $base = mem::zeroed();
-            std::ptr::addr_of!(b.$field) as isize - std::ptr::addr_of!(b) as isize
+pub(crate) fn disabled_cba() -> vk::PipelineColorBlendAttachmentState {
+    vk::PipelineColorBlendAttachmentState {
+        color_write_mask: vk::ColorComponentFlags::R | vk::ColorComponentFlags::G |
+            vk::ColorComponentFlags::B | vk::ColorComponentFlags::A,
+        blend_enable: vk::FALSE,
+        ..Default::default()
+    }
+}
+
+pub(crate) fn transparent_cba() -> vk::PipelineColorBlendAttachmentState {
+    vk::PipelineColorBlendAttachmentState {
+        color_write_mask: vk::ColorComponentFlags::R | vk::ColorComponentFlags::G |
+            vk::ColorComponentFlags::B | vk::ColorComponentFlags::A,
+        blend_enable: vk::TRUE,
+        src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
+        dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+        color_blend_op: vk::BlendOp::ADD,
+        src_alpha_blend_factor: vk::BlendFactor::ONE,
+        dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+        alpha_blend_op: vk::BlendOp::ADD,
+        ..Default::default()
+    }
+}
+
+pub(crate) struct StandardGraphicsPipelineInfo {
+    shader_stages: Vec<vk::PipelineShaderStageCreateInfo>,
+    vertex_input_state: vk::PipelineVertexInputStateCreateInfo,
+    back_face_culling: bool,
+    depth_testing: bool,
+    color_blend_attachment_state: Vec<vk::PipelineColorBlendAttachmentState>,
+    // ^^^ corresponds to the color attachment for the respective subpass this pipeline is in
+}
+
+pub(crate) unsafe fn standard_graphics_pipeline(
+    device: Rc<Device>,
+    pipeline_infos: Vec<StandardGraphicsPipelineInfo>,
+    pipeline_layout: vk::PipelineLayout,
+    renderpass: vk::RenderPass
+) -> Vec<vk::Pipeline> {
+    let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo {
+        topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+        primitive_restart_enable: vk::FALSE,
+        ..Default::default()
+    };
+
+    let viewport_state_info = vk::PipelineViewportStateCreateInfo {
+        viewport_count: 1,
+        scissor_count: 1,
+        ..Default::default()
+    };
+
+    let mut rasterizer_info = vk::PipelineRasterizationStateCreateInfo {
+        depth_clamp_enable: vk::FALSE,
+        rasterizer_discard_enable: vk::FALSE,
+        polygon_mode: vk::PolygonMode::FILL,
+        line_width: 1.0,
+        cull_mode: vk::CullModeFlags::NONE,
+        front_face: vk::FrontFace::COUNTER_CLOCKWISE,
+        depth_bias_enable: vk::FALSE,
+        ..Default::default()
+    };
+
+    let multisampling_info = vk::PipelineMultisampleStateCreateInfo {
+        sample_shading_enable: vk::FALSE,
+        rasterization_samples: vk::SampleCountFlags::TYPE_1,
+        ..Default::default()
+    };
+
+    let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
+        depth_test_enable: vk::TRUE,
+        depth_write_enable: vk::TRUE,
+        depth_compare_op: vk::CompareOp::GREATER,
+        depth_bounds_test_enable: vk::FALSE,
+        stencil_test_enable: vk::FALSE,
+        ..Default::default()
+    };
+
+    let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];  // vk::DynamicState::CULL_MODE
+    let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::builder()
+        .dynamic_states(&dynamic_states)
+        .build();
+
+    let mut pipeline_create_infos = vec![];
+
+    for info in pipeline_infos {
+        let color_blend_info = vk::PipelineColorBlendStateCreateInfo::builder()
+            .logic_op_enable(false)
+            .attachments(&info.color_blend_attachment_state)
+            .blend_constants([0.0, 0.0, 0.0, 0.0])
+            .build();
+
+        if info.back_face_culling {
+            rasterizer_info.cull_mode = vk::CullModeFlags::BACK;
         }
-    }};
+
+        let pipeline_create_info = vk::GraphicsPipelineCreateInfo {
+            stage_count: info.shader_stages.len() as u32,
+            p_stages: info.shader_stages.as_ptr(),
+            p_vertex_input_state: &info.vertex_input_state,
+            p_input_assembly_state: &input_assembly_info,
+            p_viewport_state: &viewport_state_info,
+            p_rasterization_state: &rasterizer_info,
+            p_multisample_state: &multisampling_info,
+            p_depth_stencil_state: if info.depth_testing {&depth_stencil} else {&vk::PipelineDepthStencilStateCreateInfo::default()},
+            p_color_blend_state: &color_blend_info,
+            p_dynamic_state: &dynamic_state_info,
+
+            layout: pipeline_layout,
+            render_pass: renderpass,
+            subpass: 0,
+            ..Default::default()
+        };
+
+        pipeline_create_infos.push(pipeline_create_info);
+    }
+
+    device.create_graphics_pipelines(vk::PipelineCache::null(), &pipeline_create_infos, None)
+        .unwrap()
 }
 
 

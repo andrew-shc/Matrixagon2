@@ -9,7 +9,7 @@ use crate::util::create_local_image;
 // presentation attachment is not included
 // all AttachmentRef refers to all elective attachments (including depth/stencil)
 #[derive(Copy, Clone, Debug)]
-pub(crate) enum AttachmentRef {
+pub(crate) enum FBAttachmentRef {
     Color,
     ColorInput,  // color attachment that can be also used as input (attachments)
     Depth, // uses its own depth format
@@ -36,7 +36,7 @@ impl FramebufferManager {
 
     pub(crate) unsafe fn new_swapchain_bounded(
         dbv: DebugVisibility, vi: Rc<VulkanInstance>, device: Rc<Device>, renderpass: vk::RenderPass,
-        attachments: Vec<AttachmentRef>, prsnt_imgs: Vec<vk::Image>,
+        attachments: Vec<FBAttachmentRef>, prsnt_imgs: Vec<vk::Image>,
         color_fmt: vk::Format, depth_fmt: vk::Format, extent: vk::Extent2D,
         prsnt_inp: bool,
     ) -> Self {
@@ -53,7 +53,7 @@ impl FramebufferManager {
                 println!("FB ATTACHMENT {attachment:?}");
             }
             match attachment {
-                AttachmentRef::Depth => {
+                FBAttachmentRef::Depth => {
                     // TODO: maybe we can but the image format (color, depth, etc.) separate
                     // TODO: when creating image buffer
                     let (depth_img, depth_img_mem) = create_local_image(
@@ -88,7 +88,7 @@ impl FramebufferManager {
                     attachment_imgvs.push(depth_view);
                     attachment_imgms.push(depth_img_mem);
                 }
-                AttachmentRef::Color => {
+                FBAttachmentRef::Color => {
                     let (color_img, color_img_mem) = create_local_image(
                         vi.clone(), device.clone(),
                         vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
@@ -122,7 +122,7 @@ impl FramebufferManager {
 
                     attachment_imgms.push(color_img_mem);
                 }
-                AttachmentRef::ColorInput => {
+                FBAttachmentRef::ColorInput => {
                     let (color_img, color_img_mem) = create_local_image(
                         vi.clone(), device.clone(),
                         vk::Extent3D {width: extent.width, height: extent.height, depth: 1},
