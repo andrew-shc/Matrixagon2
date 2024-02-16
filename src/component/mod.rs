@@ -11,7 +11,7 @@ use crate::world::{WorldEvent};
 
 
 // can be modified for new render purposes beyond simple camera and terrain
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum RenderDataPurpose {
     CameraViewProjection,
     BlockTextures,

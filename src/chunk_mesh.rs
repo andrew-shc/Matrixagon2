@@ -7,51 +7,51 @@ use crate::component::camera::{Length3D};
 use crate::component::RenderDataPurpose;
 
 
-pub(crate) trait ChunkLength: uom::si::length::Unit + uom::Conversion<f32, T = f32> {}
-impl<T> ChunkLength for T where T: uom::si::length::Unit + uom::Conversion<f32, T = f32> {}
+pub(crate) trait BlockLengthUnit: uom::si::length::Unit + uom::Conversion<f32, T = f32> {}
+impl<T> BlockLengthUnit for T where T: uom::si::length::Unit + uom::Conversion<f32, T = f32> {}
 
 
 pub(crate) trait ChunkGeneratable {
-    type M: ChunkLength;
+    type M: BlockLengthUnit;
     type P;
     type V;
     type I;
     fn generate_chunk(&self, pos: Length3D) -> Box<[Self::P]>;
-    fn generate_mesh(&self, chunks: &HashMap<ChunkPosition<Self::M>, Chunk<Self::P, Self::M>>) -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>;
+    fn generate_mesh(&self, chunks: &HashMap<Position<Self::M>, Chunk<Self::P, Self::M>>) -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>;
 }
 
 
 #[derive(Copy, Clone)]
-pub(crate) struct ChunkAdjacency<M: ChunkLength> {
-    pub(crate) top: Option<ChunkPosition<M>>,
-    pub(crate) bottom: Option<ChunkPosition<M>>,
-    pub(crate) left: Option<ChunkPosition<M>>,
-    pub(crate) right: Option<ChunkPosition<M>>,
-    pub(crate) front: Option<ChunkPosition<M>>,
-    pub(crate) back: Option<ChunkPosition<M>>,
+pub(crate) struct ChunkAdjacency<M: BlockLengthUnit> {
+    pub(crate) top: Option<Position<M>>,
+    pub(crate) bottom: Option<Position<M>>,
+    pub(crate) left: Option<Position<M>>,
+    pub(crate) right: Option<Position<M>>,
+    pub(crate) front: Option<Position<M>>,
+    pub(crate) back: Option<Position<M>>,
 }
-impl<M: ChunkLength> Default for ChunkAdjacency<M> {
+impl<M: BlockLengthUnit> Default for ChunkAdjacency<M> {
     fn default() -> Self {Self {top: None, bottom: None, left: None, right: None, front: None, back: None}}
 }
 
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct ChunkPosition<M: ChunkLength> {
-    x: isize, y: isize, z: isize, _measure: PhantomData<M>,
+pub(crate) struct Position<M: BlockLengthUnit> {
+    pub(crate) x: isize, pub(crate) y: isize, pub(crate) z: isize, _measure: PhantomData<M>,
 }
 
-impl<M: ChunkLength> PartialEq<Self> for ChunkPosition<M> {
+impl<M: BlockLengthUnit> PartialEq<Self> for Position<M> {
     fn eq(&self, other: &Self) -> bool {self.x == other.x && self.y == other.y && self.z == other.z}
 }
-impl<M: ChunkLength> Eq for ChunkPosition<M> {}
-impl<M: ChunkLength> Hash for ChunkPosition<M> {
+impl<M: BlockLengthUnit> Eq for Position<M> {}
+impl<M: BlockLengthUnit> Hash for Position<M> {
     fn hash<H: Hasher>(&self, state: &mut H) {self.x.hash(state); self.y.hash(state); self.z.hash(state);}
 }
-impl<M: ChunkLength> Default for ChunkPosition<M> {
+impl<M: BlockLengthUnit> Default for Position<M> {
     fn default() -> Self {Self {x: isize::default(), y: isize::default(), z: isize::default(), _measure: PhantomData}}
 }
 
 
-impl<M: ChunkLength> From<Length3D> for ChunkPosition<M> {
+impl<M: BlockLengthUnit> From<Length3D> for Position<M> {
     fn from(value: Length3D) -> Self {
         Self {
             x: value.x.floor::<M>().get::<M>() as isize,
@@ -62,7 +62,7 @@ impl<M: ChunkLength> From<Length3D> for ChunkPosition<M> {
     }
 }
 
-impl<M: ChunkLength> ChunkPosition<M> {
+impl<M: BlockLengthUnit> Position<M> {
     fn top(self) -> Self { Self { x: self.x, y: self.y+1, z: self.z, _measure: PhantomData} }
     fn bottom(self) -> Self { Self { x: self.x, y: self.y-1, z: self.z, _measure: PhantomData } }
     fn left(self) -> Self { Self { x: self.x-1, y: self.y, z: self.z, _measure: PhantomData } }
@@ -79,7 +79,7 @@ pub(crate) struct ChunkMesh<G: ChunkGeneratable> {
     // inner radius should be more than 0, or else it will keep updating and rebuilding mesh (disaster) and quite useless too
 
     generator: G,
-    chunks: HashMap<ChunkPosition<G::M>, Chunk<G::P, G::M>>,
+    chunks: HashMap<Position<G::M>, Chunk<G::P, G::M>>,
     chunk_adjacency: Vec<ChunkAdjacency<G::M>>,
 }
 
@@ -104,7 +104,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
         for cx in -self.chunk_radius..self.chunk_radius {
             for cy in -self.chunk_radius..self.chunk_radius {
                 for cz in -self.chunk_radius..self.chunk_radius {
-                    println!("Initial chunk load [{cx} {cy} {cz}]");
+                    println!("Initial chunk load [{cx} {cy} {cz} <{:?}>]", self.chunk_size);
                     self.load_chunk(Length3D::new(
                         Length::new::<G::M>(cx as f32)+self.central_pos.x.floor::<G::M>(),
                         Length::new::<G::M>(cy as f32)+self.central_pos.y.floor::<G::M>(),
@@ -164,7 +164,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
                             Length::new::<G::M>(cz as f32)+self.central_pos.z,
                         );
 
-                        if let Some(chunk) = self.chunks.get_mut(&ChunkPosition::from(new_chunk_pos)) {
+                        if let Some(chunk) = self.chunks.get_mut(&Position::from(new_chunk_pos)) {
                             chunk.visible = true;
                             chunk_changed = true;
                         } else {
@@ -195,7 +195,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
     }
 
     fn load_chunk(&mut self, pos: Length3D) {
-        let hash_pos = ChunkPosition::from(pos);
+        let hash_pos = Position::from(pos);
         // println!("LOAD CHUNK / HASH POS {:?}", hash_pos);
 
         let mut adj = ChunkAdjacency::default();
@@ -240,16 +240,16 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
 }
 
 
-pub(crate) struct Chunk<P, M: ChunkLength> {
+pub(crate) struct Chunk<P, M: BlockLengthUnit> {
     pub(crate) voxels: Box<[P]>,
     pub(crate) pos: Length3D,  // south-west corner of the chunk TODO
-    pub(crate) hash_pos: ChunkPosition<M>,
+    pub(crate) hash_pos: Position<M>,
     pub(crate) adjacency: ChunkAdjacency<M>,
     visible: bool,
 }
 
-impl<P, M: ChunkLength> Chunk<P, M> {
-    pub(crate) fn new(pos: Length3D, hash_pos: ChunkPosition<M>, voxels: Box<[P]>, init_adjs: ChunkAdjacency<M>) -> Self {
+impl<P, M: BlockLengthUnit> Chunk<P, M> {
+    pub(crate) fn new(pos: Length3D, hash_pos: Position<M>, voxels: Box<[P]>, init_adjs: ChunkAdjacency<M>) -> Self {
         Self {
             voxels, pos, visible: true, hash_pos, adjacency: init_adjs,
         }

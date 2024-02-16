@@ -42,6 +42,7 @@ impl DebugUISubShader {
                     shader_stages, vertex_input_state,
                     back_face_culling: false, depth_testing: false,
                     color_blend_attachment_state: vec![transparent_cba()],
+                    subpass_index: 1,
                 },
             ],
             pipeline_layout, renderpass,

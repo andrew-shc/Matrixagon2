@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use noise::Perlin;
-use crate::chunk_mesh::{Chunk, ChunkGeneratable, ChunkPosition};
+use uom::si::f32::Length;
+use crate::chunk_mesh::{Chunk, ChunkGeneratable, Position};
 use crate::component::camera::Length3D;
 use crate::component::RenderDataPurpose;
 use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir, MeshType, TransparencyType};
@@ -17,9 +18,9 @@ pub(super) struct ChunkGeneratorHF<'b> {
 }
 
 impl<'b> ChunkGeneratorHF<'b> {
-    pub(super) fn new(chunk_size: u32, block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper,) -> Self {
+    pub(super) fn new(block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper,) -> Self {
         Self {
-            chunk_size, block_ind, txtr_id_mapper
+            chunk_size: Length::new::<<Self as ChunkGeneratable>::M>(1.0).get::<blox>() as u32, block_ind, txtr_id_mapper
         }
     }
 }
@@ -37,28 +38,34 @@ impl ChunkGeneratable for ChunkGeneratorHF<'_> {
     type I = u32;
 
     fn generate_chunk(&self, pos: Length3D) -> Box<[Self::P]> {
-        let mut voxel = (0..self.chunk_size*self.chunk_size*self.chunk_size)
-            .into_iter()
-            .map(|i| {
-                let (x,y,z) = self.reverse_access(pos, i as f32);
-                // TERRAIN GENERATION (NO SIDE EFFECT)
+        let mut raw_voxels = Vec::with_capacity((self.chunk_size*self.chunk_size*self.chunk_size) as usize);
+        let pos: Position<blox> = pos.into();
 
-                if y > 40.0 {
-                    BlockCullType::Empty
-                } else {
-                    BlockCullType::BorderVisible(Block(0))
+        for y in pos.y..pos.y+self.chunk_size() as isize {
+            for x in pos.x..pos.x+self.chunk_size() as isize {
+                for z in pos.z..pos.z+self.chunk_size() as isize {
+                    raw_voxels.push(
+                        if y > 40 {
+                            BlockCullType::Empty
+                        } else {
+                            BlockCullType::BorderVisible(Block(2))
+                        }
+                    )
                 }
-            })
-            .collect::<Box<[BlockCullType]>>();
+            }
+        }
+        let mut voxel = raw_voxels.into_boxed_slice();
 
         self.block_culling(&mut voxel);
 
         voxel
     }
 
-    fn generate_mesh(&self, chunks: &HashMap<ChunkPosition<Self::M>, Chunk<Self::P, Self::M>>)
+    fn generate_mesh(&self, chunks: &HashMap<Position<Self::M>, Chunk<Self::P, Self::M>>)
         -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>
     {
+        println!("GEN MESH START");
+
         let mut opaque_verts = vec![];
         let mut opaque_inds = vec![];
         let mut opaque_faces = 0;
@@ -194,6 +201,8 @@ impl ChunkGeneratable for ChunkGeneratorHF<'_> {
                 }
             }
         }
+
+        println!("GEN MESH END");
 
         vec![
             (opaque_verts, opaque_inds, RenderDataPurpose::TerrainOpaque),

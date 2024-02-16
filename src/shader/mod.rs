@@ -55,6 +55,7 @@ pub(crate) struct StandardGraphicsPipelineInfo {
     depth_testing: bool,
     color_blend_attachment_state: Vec<vk::PipelineColorBlendAttachmentState>,
     // ^^^ corresponds to the color attachment for the respective subpass this pipeline is in
+    subpass_index: u32,
 }
 
 pub(crate) unsafe fn standard_graphics_pipeline(
@@ -133,7 +134,7 @@ pub(crate) unsafe fn standard_graphics_pipeline(
 
             layout: pipeline_layout,
             render_pass: renderpass,
-            subpass: 0,
+            subpass: info.subpass_index,
             ..Default::default()
         };
 

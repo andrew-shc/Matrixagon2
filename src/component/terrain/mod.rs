@@ -9,12 +9,13 @@ use noise::NoiseFn;
 use uom::si::f32::Length;
 use winit::event::VirtualKeyCode;
 use crate::chunk_mesh::{ChunkGeneratable, ChunkMesh};
-use crate::component::{Component, RenderData};
+use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::component::camera::Length3D;
 use crate::component::terrain::chunk_gen::ChunkGeneratorEF;
 use crate::component::terrain::chunk_gen_hf::ChunkGeneratorHF;
 use crate::handler::VulkanInstance;
 use crate::measurement::{blox, chux, chux_hf, chux_mf};
+use crate::shader::chunk::ChunkVertex;
 use crate::util::{CmdBufContext, create_host_buffer, create_local_buffer};
 use crate::world::WorldEvent;
 
@@ -135,29 +136,24 @@ pub(crate) struct Terrain<'b> {
     block_ind: Vec<BlockData<'b>>,
 
     chunk_mesh_ef: Option<ChunkMesh<ChunkGeneratorEF<'b>>>,
-    chunk_mesh_mf: Option<ChunkMesh<ChunkGeneratorHF<'b>>>,
     chunk_mesh_hf: Option<ChunkMesh<ChunkGeneratorHF<'b>>>,
+    chunk_mesh_mf: Option<ChunkMesh<ChunkGeneratorHF<'b>>>,
     to_render: Vec<RenderData>,
-    chunk_update: bool,
-
-    chunk_size: u32,
+    chunk_update_ef: bool,
+    chunk_update_hf: bool,
+    chunk_update_mf: bool,
 
     spectator_mode: bool,
 }
 
 impl<'b> Terrain<'b> {
     pub(crate) fn new(vi: Rc<VulkanInstance>, device: Rc<Device>, ctx: CmdBufContext, block_ind: Vec<BlockData<'b>>) -> Self {
-        let chunk_size = Length::new::<chux>(1.0).get::<blox>() as u32;
-
         Self {
             vi, device, ctx: ctx.clone(),
             block_ind,
-            chunk_mesh_ef: None,
-            chunk_mesh_mf: None,
-            chunk_mesh_hf: None,
+            chunk_mesh_ef: None, chunk_mesh_mf: None, chunk_mesh_hf: None,
             to_render: vec![],
-            chunk_update: true,
-            chunk_size,
+            chunk_update_ef: true, chunk_update_hf: true, chunk_update_mf: true,
             spectator_mode: false,
         }
     }
@@ -172,13 +168,16 @@ impl Component for Terrain<'static> {
     fn respond_event(&mut self, event: WorldEvent) -> Vec<WorldEvent> {
         match event {
             WorldEvent::UserPosition(pos) if !self.spectator_mode => {
-                if let Some(ref mut chunk_mesh) = self.chunk_mesh_mf {
+                if let Some(ref mut chunk_mesh) = self.chunk_mesh_ef {
                     let need_update = chunk_mesh.update(pos);
-                    self.chunk_update = self.chunk_update || need_update;
+                    self.chunk_update_ef = self.chunk_update_ef || need_update;
+                }
+                if let Some(ref mut chunk_mesh) = self.chunk_mesh_hf {
+                    let need_update = chunk_mesh.update(pos);
+                    self.chunk_update_hf = self.chunk_update_hf || need_update;
                 }
             }
             WorldEvent::NewTextureMapper(txtr_mapper) => {
-
                 let mut chunk_mesh_ef = ChunkMesh::new(
                     Length3D {
                         x: Length::new::<blox>(0.0),
@@ -187,7 +186,7 @@ impl Component for Terrain<'static> {
                     },
                     4, 2,
                     ChunkGeneratorEF::new(
-                        self.chunk_size, self.block_ind.clone(), txtr_mapper.clone()
+                        self.block_ind.clone(), txtr_mapper.clone()
                     ),
                 );
                 let mut chunk_mesh_hf = ChunkMesh::new(
@@ -196,16 +195,16 @@ impl Component for Terrain<'static> {
                         y: Length::new::<blox>(0.0),
                         z: Length::new::<blox>(0.0),
                     },
-                    4, 2,
+                    2, 1,
                     ChunkGeneratorHF::new(
-                        self.chunk_size, self.block_ind.clone(), txtr_mapper.clone()
+                        self.block_ind.clone(), txtr_mapper.clone()
                     ),
                 );
 
-                chunk_mesh_ef.initialize();
+                // chunk_mesh_ef.initialize();
                 chunk_mesh_hf.initialize();
 
-                self.chunk_mesh_ef.replace(chunk_mesh_ef);
+                // self.chunk_mesh_ef.replace(chunk_mesh_ef);
                 self.chunk_mesh_hf.replace(chunk_mesh_hf);
             }
             WorldEvent::SpectatorMode(enabled) => {
@@ -219,10 +218,52 @@ impl Component for Terrain<'static> {
 
     fn update(&mut self) {
         self.to_render.clear();
-        if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh_ef {
-            if self.chunk_update {
-                for (verts, inds, purpose) in chunk_mesh.generate_vertices() {
-                    // TODO: aggregate all vertex & index (w/ proper ofs computed here) to a parent vector (verts, inds, purpose)
+
+        let mut any_chunk_update = false;
+        let mut render_data: Vec<(Vec<ChunkVertex>, Vec<u32>, RenderDataPurpose)> = Vec::new();
+
+        let mut data_aggregator = |rd| {
+            for (mut verts, mut inds, purpose) in rd {
+                // TODO: aggregate all vertex & index (w/ proper ofs computed here) to a parent vector (verts, inds, purpose)
+                let mut appended = false;
+                for (v, i, p) in render_data.iter_mut() {
+                    if *p == purpose {
+                        v.append(&mut verts);
+                        i.append(&mut inds);
+                        appended = true;
+                        break;
+                    }
+                }
+                if !appended {
+                    render_data.push((verts, inds, purpose));
+                }
+            }
+        };
+
+        if self.chunk_update_ef {
+            if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh_ef {
+                data_aggregator(chunk_mesh.generate_vertices());
+                self.chunk_update_ef = false;
+                any_chunk_update = true;
+            }
+        }
+        if self.chunk_update_hf {
+            if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh_hf {
+                println!("CHUNK UPDATE HF");
+                data_aggregator(chunk_mesh.generate_vertices());
+                self.chunk_update_hf = false;
+                any_chunk_update = true;
+            }
+        }
+
+        if any_chunk_update {
+            self.to_render = render_data.iter()
+                .filter(|(verts, inds, purpose)| {
+                    println!("RENDER DATA: {:?} {:?} {:?}", verts.len(), inds.len(), purpose);
+
+                    verts.len() != 0 && inds.len() != 0
+                })
+                .flat_map(|(verts, inds, purpose)| {
                     let (host_vbo, host_vmo, _, host_vbo_size) = unsafe {
                         create_host_buffer(self.vi.clone(), self.device.clone(), &verts, vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::VERTEX_BUFFER, true)
                     };
@@ -243,22 +284,23 @@ impl Component for Terrain<'static> {
                         self.device.cmd_copy_buffer(cmd_buf, host_ibo, local_ibo, &indx_buf_region);
                     }); }
 
-                    self.to_render.push(RenderData::RecreateVertexBuffer(
-                        local_vbo, local_vmo, purpose
-                    ));
-                    self.to_render.push(RenderData::RecreateIndexBuffer(
-                        local_ibo, local_imo, inds.len() as u32, purpose
-                    ));
-
                     unsafe {
                         self.device.destroy_buffer(host_vbo, None);
                         self.device.free_memory(host_vmo, None);
                         self.device.destroy_buffer(host_ibo, None);
                         self.device.free_memory(host_imo, None);
                     }
-                }
-                self.chunk_update = false;
-            }
+
+                    [
+                        RenderData::RecreateVertexBuffer(
+                            local_vbo, local_vmo, *purpose
+                        ),
+                        RenderData::RecreateIndexBuffer(
+                            local_ibo, local_imo, inds.len() as u32, *purpose
+                        )
+                    ]
+                })
+                .collect();
         }
     }
 }

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::mem;
 use noise::{NoiseFn, Perlin};
-use crate::chunk_mesh::{Chunk, ChunkPosition, ChunkGeneratable};
+use uom::si::f32::Length;
+use crate::chunk_mesh::{Chunk, Position, ChunkGeneratable};
 use crate::component::camera::Length3D;
 use crate::component::RenderDataPurpose;
 use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir, MeshType, TextureMapper, TransparencyType};
@@ -22,9 +23,10 @@ impl<'b> ChunkGeneratorEF<'b> {
     const SEA_LEVEL: f64 = 10.0;
     const SAND_LEVEL: f64 = 13.0;
 
-    pub(super) fn new(chunk_size: u32, block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper,) -> Self {
+    pub(super) fn new(block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper,) -> Self {
         Self {
-            chunk_size, block_ind, txtr_id_mapper, noise: Perlin::new(50), floral_noise: Perlin::new(23),
+            chunk_size: Length::new::<<Self as ChunkGeneratable>::M>(1.0).get::<blox>() as u32, block_ind, txtr_id_mapper,
+            noise: Perlin::new(50), floral_noise: Perlin::new(23),
         }
     }
 }
@@ -125,7 +127,7 @@ impl ChunkGeneratable for ChunkGeneratorEF<'_> {
         voxel
     }
 
-    fn generate_mesh(&self, chunks: &HashMap<ChunkPosition<Self::M>, Chunk<Self::P, Self::M>>)
+    fn generate_mesh(&self, chunks: &HashMap<Position<Self::M>, Chunk<Self::P, Self::M>>)
         -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>
     {
         let mut opaque_verts = vec![];

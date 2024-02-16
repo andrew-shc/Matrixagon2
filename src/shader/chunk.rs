@@ -186,16 +186,19 @@ impl ChunkRasterizer {
                     shader_stages, vertex_input_state,
                     back_face_culling: true, depth_testing: true,
                     color_blend_attachment_state: vec![transparent_cba()],
+                    subpass_index: 0,
                 },
                 StandardGraphicsPipelineInfo {
                     shader_stages: transparent_shader_stages, vertex_input_state,
                     back_face_culling: false, depth_testing: true,
                     color_blend_attachment_state: vec![transparent_cba()],
+                    subpass_index: 0,
                 },
                 StandardGraphicsPipelineInfo {
                     shader_stages: translucent_fluid_shader_stages, vertex_input_state,
                     back_face_culling: false, depth_testing: true,
                     color_blend_attachment_state: vec![transparent_cba()],
+                    subpass_index: 0,
                 },
             ],
             descriptor.pipeline_layout, renderpass,
@@ -347,67 +350,59 @@ impl Shader for ChunkRasterizer {
     }
 
     unsafe fn draw_command(&self, cmd_buf: vk::CommandBuffer, framebuffer: vk::Framebuffer) {
-        if let (
-            Some(terrain_vbo), Some(terrain_ibo),
-            Some(transparent_vbo), Some(transparent_ibo),
-            Some(translucent_fluid_vbo), Some(translucent_fluid_ibo),
-        )
-            = (
-            self.terrain_vbo, self.terrain_ibo,
-            self.transparent_vbo, self.transparent_ibo,
-            self.translucent_fluid_vbo, self.translucent_fluid_ibo
-        ) {
-            let renderpass_info = vk::RenderPassBeginInfo::builder()
-                .render_pass(self.renderpass)
-                .framebuffer(framebuffer)
-                .render_area(vk::Rect2D { offset: vk::Offset2D {x:0, y:0}, extent: self.extent})
-                .clear_values(&[
-                    // TODO: DEBUG UI SENSITIVE
-                    vk::ClearValue { color: vk::ClearColorValue {float32: [0.2, 0.3, 0.9, 1.0]} },
-                    vk::ClearValue { color: vk::ClearColorValue {float32: [0.0, 0.0, 0.0, 0.0]} },
-                ])
-                .build();
+        let renderpass_info = vk::RenderPassBeginInfo::builder()
+            .render_pass(self.renderpass)
+            .framebuffer(framebuffer)
+            .render_area(vk::Rect2D { offset: vk::Offset2D {x:0, y:0}, extent: self.extent})
+            .clear_values(&[
+                // TODO: DEBUG UI SENSITIVE
+                vk::ClearValue { color: vk::ClearColorValue {float32: [0.2, 0.3, 0.9, 1.0]} },
+                vk::ClearValue { color: vk::ClearColorValue {float32: [0.0, 0.0, 0.0, 0.0]} },
+            ])
+            .build();
 
-            self.device.cmd_begin_render_pass(cmd_buf, &renderpass_info, vk::SubpassContents::INLINE);
+        self.device.cmd_begin_render_pass(cmd_buf, &renderpass_info, vk::SubpassContents::INLINE);
 
-            let viewport = vk::Viewport {
-                x: 0.0,
-                y: 0.0,
-                width: self.extent.width as f32,
-                height: self.extent.height as f32,
-                min_depth: 0.0,
-                max_depth: 1.0,
-            };
-            let scissor = vk::Rect2D { offset: vk::Offset2D {x:0,y:0}, extent: self.extent };
-            self.device.cmd_set_viewport(cmd_buf, 0, &[viewport]);
-            self.device.cmd_set_scissor(cmd_buf, 0, &[scissor]);
+        let viewport = vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: self.extent.width as f32,
+            height: self.extent.height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        };
+        let scissor = vk::Rect2D { offset: vk::Offset2D {x:0,y:0}, extent: self.extent };
+        self.device.cmd_set_viewport(cmd_buf, 0, &[viewport]);
+        self.device.cmd_set_scissor(cmd_buf, 0, &[scissor]);
 
-            self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.descriptor.pipeline_layout(),
-                                                 0, &self.descriptor.descriptor_sets(&[0, 1, 2]), &[]);
+        self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.descriptor.pipeline_layout(),
+                                             0, &self.descriptor.descriptor_sets(&[0, 1, 2]), &[]);
 
-            self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.gfxs_pipeline);
-
+        if let (Some((terrain_vbo, _)), Some(terrain_ibo)) = (self.terrain_vbo, self.terrain_ibo) {
             // opaque objects
-            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[terrain_vbo.0], &[0]);
+            self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.gfxs_pipeline);
+            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[terrain_vbo], &[0]);
             self.device.cmd_bind_index_buffer(cmd_buf, terrain_ibo.0, 0, vk::IndexType::UINT32);
             self.device.cmd_draw_indexed(cmd_buf, terrain_ibo.2, 1, 0, 0, 0);
+        }
+        if let (Some((transparent_vbo, _)), Some(transparent_ibo)) = (self.transparent_vbo, self.transparent_ibo) {
             // transparent objects
             self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.transparent_gfxs_pipeline);
-            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[transparent_vbo.0], &[0]);
+            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[transparent_vbo], &[0]);
             self.device.cmd_bind_index_buffer(cmd_buf, transparent_ibo.0, 0, vk::IndexType::UINT32);
             self.device.cmd_draw_indexed(cmd_buf, transparent_ibo.2, 1, 0, 0, 0);
+        }
+        if let (Some((translucent_fluid_vbo, _)), Some(translucent_fluid_ibo)) = (self.translucent_fluid_vbo, self.translucent_fluid_ibo) {
             // translucent objects
             self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.translucent_fluid_gfxs_pipeline);
-            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[translucent_fluid_vbo.0], &[0]);
+            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[translucent_fluid_vbo], &[0]);
             self.device.cmd_bind_index_buffer(cmd_buf, translucent_fluid_ibo.0, 0, vk::IndexType::UINT32);
             self.device.cmd_draw_indexed(cmd_buf, translucent_fluid_ibo.2, 1, 0, 0, 0);
-
-            self.debug_ui_sub_shader.draw_pipeline(cmd_buf, &self.descriptor);
-
-            self.device.cmd_end_render_pass(cmd_buf);
-        } else {
-            println!("Cube shader cannot draw due to vertex and index buffer not created.");
         }
+
+        self.debug_ui_sub_shader.draw_pipeline(cmd_buf, &self.descriptor);
+
+        self.device.cmd_end_render_pass(cmd_buf);
     }
 
     unsafe fn destroy(&self) {

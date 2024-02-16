@@ -41,7 +41,7 @@ impl TickSync {
     }
 
     fn update_animation_time(&mut self, delta: f32) {
-        if(self.time >= 2.0*f32::PI()) {  // makes looping animation using trig easier
+        if self.time >= 2.0*f32::PI() {  // makes looping animation using trig easier
             self.time = 0.0;
         } else {
             self.time += self.increment*delta;
