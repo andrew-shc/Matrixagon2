@@ -22,6 +22,13 @@ impl Length3D {
     pub(crate) fn new(x: Length, y: Length, z: Length) -> Self {
         Self {x,y,z}
     }
+    pub(crate) fn origin() -> Self {
+        Self {
+            x: Length::new::<blox>(0.0),
+            y: Length::new::<blox>(0.0),
+            z: Length::new::<blox>(0.0),
+        }
+    }
 }
 
 impl Default for Length3D {

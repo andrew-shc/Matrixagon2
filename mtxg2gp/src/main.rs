@@ -8,7 +8,7 @@ fn main() {
         mtxg_output: true,
         mtxg_render_output: false,
     };
-    let mtxg = MatrixagonApp::init(true, debug_visibility, false, true);
+    let mtxg = MatrixagonApp::init(true, debug_visibility, true, true);
     // mtxg.load_shader(StandardRasterizer::new());
     mtxg.run();
 }

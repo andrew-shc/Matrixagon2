@@ -12,7 +12,8 @@ pub(super) trait ChunkMeshUtil {
     fn texture_id_mapper(&self) -> TextureIDMapper;
 
     fn access(&self, x: u32, y: u32, z: u32) -> usize {
-        (y*self.chunk_size()*self.chunk_size()+x*self.chunk_size()+z) as usize
+        let size = self.chunk_size();
+        (y*size*size+x*size+z) as usize
     }
 
     fn check_block_obscured(block: BlockCullType) -> bool {
@@ -64,8 +65,8 @@ pub(super) trait ChunkMeshUtil {
         }
     }
 
-    fn check_coord_within_chunk(&self, x: u32, y: u32, z: u32) -> bool {
-        0 <= x && x < self.chunk_size() && 0 <= y && y < self.chunk_size() && 0 <= z && z < self.chunk_size()
+    fn check_coord_within_chunk(&self, x: i32, y: i32, z: i32) -> bool {
+        0 <= x && x < self.chunk_size() as i32 && 0 <= y && y < self.chunk_size() as i32 && 0 <= z && z < self.chunk_size() as i32
     }
 
     fn gen_face(&self, loc: (f32, f32, f32), ind_ofs: u32, face: FaceDir, txtr_mapping: TextureMapper, fluid: bool) -> (Vec<ChunkVertex>, Vec<u32>) {

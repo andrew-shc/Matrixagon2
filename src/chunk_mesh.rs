@@ -1,10 +1,14 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::slice::Chunks;
+use uom::fmt::DisplayStyle;
 use uom::num_traits::Float;
 use uom::si::f32::Length;
+use uom::si::Unit;
 use crate::component::camera::{Length3D};
 use crate::component::RenderDataPurpose;
+use crate::measurement::chux_hf;
 
 
 pub(crate) trait BlockLengthUnit: uom::si::length::Unit + uom::Conversion<f32, T = f32> {}
@@ -12,12 +16,16 @@ impl<T> BlockLengthUnit for T where T: uom::si::length::Unit + uom::Conversion<f
 
 
 pub(crate) trait ChunkGeneratable {
-    type M: BlockLengthUnit;
+    type A: BlockLengthUnit;  // border outer radius
+    type B: BlockLengthUnit;  // empty inner radius
     type P;
     type V;
     type I;
-    fn generate_chunk(&self, pos: Length3D) -> Box<[Self::P]>;
-    fn generate_mesh(&self, chunks: &HashMap<Position<Self::M>, Chunk<Self::P, Self::M>>) -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>;
+    fn generate_voxel(&self, pos: Length3D) -> Box<[Self::P]>;
+    fn generate_mesh(&self, pos: Length3D, voxels: &[Self::P])
+        -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>;
+    fn aggregate_mesh(&self, chunks: &HashMap<Position<Self::B>, Chunk<Self::P, Self::V, Self::I, Self::B>>)
+        -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>;
 }
 
 
@@ -71,115 +79,178 @@ impl<M: BlockLengthUnit> Position<M> {
     fn back(self) -> Self { Self { x: self.x, y: self.y, z: self.z-1, _measure: PhantomData } }
 }
 
+
+pub(crate) enum UpdateChunk {
+    NewPos(Length3D),
+    Forced
+}
+
+// border_radius, update_radius
+#[derive(Copy, Clone)]
+pub(crate) struct ChunkRadius(pub(crate) u32, pub(crate) u32);
+
+
 pub(crate) struct ChunkMesh<G: ChunkGeneratable> {
     pub(crate) central_pos: Length3D,
+    inner_central_pos: Length3D,
     chunk_size: Length3D,
-    chunk_radius: i32,  // border rendering radius
-    chunk_update_radius: f32,  // inner updating radius (when the player reaches beyond it, it will update the chunk)
+    chunk_outer_radius: i32,  // border rendering radius
+    chunk_outer_update_radius: f32,  // inner updating radius (when the player reaches beyond it, it will update the chunk)
+    subchunk_outer_radius: i32,  // border rendering radius (in subchunk unit)
+    chunk_inner_radius: Option<f32>,  // inside rendering radius that should not be rendered
     // inner radius should be more than 0, or else it will keep updating and rebuilding mesh (disaster) and quite useless too
+    chunk_inner_update_radius: Option<f32>,
 
     generator: G,
-    chunks: HashMap<Position<G::M>, Chunk<G::P, G::M>>,
-    chunk_adjacency: Vec<ChunkAdjacency<G::M>>,
+    chunks: HashMap<Position<G::B>, Chunk<G::P, G::V, G::I, G::B>>,
+    chunk_adjacency: Vec<ChunkAdjacency<G::B>>,
 }
 
 impl<G: ChunkGeneratable> ChunkMesh<G> {
-    pub(crate) fn new(pos: Length3D, chunk_radius: u32, inner_radius: u32, generator: G) -> Self {
+    pub(crate) fn new(pos: Length3D, outer: ChunkRadius, inner: Option<ChunkRadius>, generator: G) -> Self {
         Self {
             central_pos: pos,
+            inner_central_pos: pos,
             chunk_size: Length3D {
-                x: Length::new::<G::M>(1.0),
-                y: Length::new::<G::M>(1.0),
-                z: Length::new::<G::M>(1.0),
+                x: Length::new::<G::B>(1.0),
+                y: Length::new::<G::B>(1.0),
+                z: Length::new::<G::B>(1.0),
             },
-            chunk_radius: chunk_radius as i32,
-            chunk_update_radius: inner_radius as f32,
+            chunk_outer_radius: outer.0 as i32,
+            chunk_outer_update_radius: outer.1 as f32,
+            subchunk_outer_radius: Length::new::<G::A>(outer.0 as f32).get::<G::B>() as i32,
+            chunk_inner_radius: inner.map(| ChunkRadius(border, _) | border as f32),
+            chunk_inner_update_radius: inner.map(| ChunkRadius(_, update) | update as f32),
             generator,
             chunks: HashMap::new(),
             chunk_adjacency: Vec::new(),
         }
     }
 
-    pub(crate) fn initialize(&mut self) {
-        for cx in -self.chunk_radius..self.chunk_radius {
-            for cy in -self.chunk_radius..self.chunk_radius {
-                for cz in -self.chunk_radius..self.chunk_radius {
-                    println!("Initial chunk load [{cx} {cy} {cz} <{:?}>]", self.chunk_size);
-                    self.load_chunk(Length3D::new(
-                        Length::new::<G::M>(cx as f32)+self.central_pos.x.floor::<G::M>(),
-                        Length::new::<G::M>(cy as f32)+self.central_pos.y.floor::<G::M>(),
-                        Length::new::<G::M>(cz as f32)+self.central_pos.z.floor::<G::M>(),
-                    ));
-                }
-            }
-        }
-    }
+    // pub(crate) fn initialize(&mut self) {
+    //     for cx in -self.subchunk_outer_radius..self.subchunk_outer_radius {
+    //         for cy in -self.subchunk_outer_radius..self.subchunk_outer_radius {
+    //             for cz in -self.subchunk_outer_radius..self.subchunk_outer_radius {
+    //                 let chunk_pos = Length3D::new(
+    //                     Length::new::<G::B>(cx as f32)+self.central_pos.x,
+    //                     Length::new::<G::B>(cy as f32)+self.central_pos.y,
+    //                     Length::new::<G::B>(cz as f32)+self.central_pos.z,
+    //                 );
+    //
+    //                 println!("Initial chunk load [{cx} {cy} {cz} <{:?}>]", self.chunk_size);
+    //
+    //                 self.load_chunk(Length3D::new(
+    //                     Length::new::<G::B>(cx as f32)+self.central_pos.x.floor::<G::B>(),
+    //                     Length::new::<G::B>(cy as f32)+self.central_pos.y.floor::<G::B>(),
+    //                     Length::new::<G::B>(cz as f32)+self.central_pos.z.floor::<G::B>(),
+    //                 ));
+    //                 println!("Initial chunk loaded [{} {} {}]",
+    //                          chunk_pos.x.into_format_args(G::M, DisplayStyle::Abbreviation),
+    //                          chunk_pos.y.into_format_args(G::M, DisplayStyle::Abbreviation),
+    //                          chunk_pos.z.into_format_args(G::M, DisplayStyle::Abbreviation),
+    //                 );
+    //             }
+    //         }
+    //     }
+    // }
 
     pub(crate) fn swap_generator(&mut self, generator: G) {
         self.generator = generator;
     }
 
-    pub(crate) fn update(&mut self, pos: Length3D) -> bool {
+    pub(crate) fn update(&mut self, mode: UpdateChunk) -> bool {
         let mut pos_changed = false;
+        let mut inner_chunk_update = false;
         let mut chunk_changed = false;
 
-        if pos.x.floor::<G::M>() < self.central_pos.x-Length::new::<G::M>(self.chunk_update_radius) {
-            // println!("NEW CHUNK LOAD -X");
-            self.central_pos.x -= Length::new::<G::M>(1.0);
-            pos_changed = true;
-        } else if self.central_pos.x+Length::new::<G::M>(self.chunk_update_radius-1.0) < pos.x.floor::<G::M>() {
-            // println!("NEW CHUNK LOAD +X");
-            self.central_pos.x += Length::new::<G::M>(1.0);
-            pos_changed = true;
-        }
-        if pos.y.floor::<G::M>() < self.central_pos.y-Length::new::<G::M>(self.chunk_update_radius) {
-            // println!("NEW CHUNK LOAD -Y");
-            self.central_pos.y -= Length::new::<G::M>(1.0);
-            pos_changed = true;
-        } else if self.central_pos.y+Length::new::<G::M>(self.chunk_update_radius-1.0) < pos.y.floor::<G::M>() {
-            // println!("NEW CHUNK LOAD +Y");
-            self.central_pos.y += Length::new::<G::M>(1.0);
-            pos_changed = true;
-        }
-        if pos.z.floor::<G::M>() < self.central_pos.z-Length::new::<G::M>(self.chunk_update_radius) {
-            // println!("NEW CHUNK LOAD -Z");
-            self.central_pos.z -= Length::new::<G::M>(1.0);
-            pos_changed = true;
-        } else if self.central_pos.z+Length::new::<G::M>(self.chunk_update_radius-1.0) < pos.z.floor::<G::M>() {
-            // println!("NEW CHUNK LOAD +Z");
-            self.central_pos.z += Length::new::<G::M>(1.0);
+        if let UpdateChunk::NewPos(pos) = mode {
+            // INNER RADIUS CHUNK UPDATE
+
+            if let Some(chunk_inner_update_radius) = self.chunk_inner_update_radius {
+                inner_chunk_update |= Self::check_and_update_axis::<G::B>(&mut self.inner_central_pos.x, &pos.x, chunk_inner_update_radius);
+                inner_chunk_update |= Self::check_and_update_axis::<G::B>(&mut self.inner_central_pos.y, &pos.y, chunk_inner_update_radius);
+                inner_chunk_update |= Self::check_and_update_axis::<G::B>(&mut self.inner_central_pos.z, &pos.z, chunk_inner_update_radius);
+            }
+
+            // BORDER RADIUS CHUNK UPDATE
+
+            pos_changed |= Self::check_and_update_axis::<G::A>(&mut self.central_pos.x, &pos.x, self.chunk_outer_update_radius);
+            pos_changed |= Self::check_and_update_axis::<G::A>(&mut self.central_pos.y, &pos.y, self.chunk_outer_update_radius);
+            pos_changed |= Self::check_and_update_axis::<G::A>(&mut self.central_pos.z, &pos.z, self.chunk_outer_update_radius);
+        } else {
+            inner_chunk_update = true;
             pos_changed = true;
         }
 
-        if pos_changed {  // chunk position changed, update what chunks needs to be loaded
+        if pos_changed || inner_chunk_update {  // chunk position changed, update what chunks needs to be loaded
             // println!("CENTRAL POS {:?}", self.central_pos);
-            self.reset_chunk_visibility();
+            if pos_changed {
+                self.reset_chunk_visibility();
+            }
 
-            for cx in -self.chunk_radius..self.chunk_radius {
-                for cy in -self.chunk_radius..self.chunk_radius {
-                    for cz in -self.chunk_radius..self.chunk_radius {
-                        let new_chunk_pos = Length3D::new(
-                            Length::new::<G::M>(cx as f32)+self.central_pos.x,
-                            Length::new::<G::M>(cy as f32)+self.central_pos.y,
-                            Length::new::<G::M>(cz as f32)+self.central_pos.z,
+            for cx in -self.subchunk_outer_radius..self.subchunk_outer_radius {
+                for cy in -self.subchunk_outer_radius..self.subchunk_outer_radius {
+                    for cz in -self.subchunk_outer_radius..self.subchunk_outer_radius {
+                        let chunk_pos = Length3D::new(
+                            Length::new::<G::B>(cx as f32)+self.central_pos.x,
+                            Length::new::<G::B>(cy as f32)+self.central_pos.y,
+                            Length::new::<G::B>(cz as f32)+self.central_pos.z,
                         );
 
-                        if let Some(chunk) = self.chunks.get_mut(&Position::from(new_chunk_pos)) {
-                            chunk.visible = true;
-                            chunk_changed = true;
-                        } else {
-                            // chunk at new_chunk_pos does not exist (needs to be created)
+                        if pos_changed {
 
-                            // println!("New chunk loaded [{} {} {}]",
-                            //          new_chunk_pos.x.into_format_args(G::M, DisplayStyle::Abbreviation),
-                            //          new_chunk_pos.y.into_format_args(G::M, DisplayStyle::Abbreviation),
-                            //          new_chunk_pos.z.into_format_args(G::M, DisplayStyle::Abbreviation),
-                            // );
-                            self.load_chunk(new_chunk_pos);
-                            chunk_changed = true;
+                            if let Some(chunk) = self.chunks.get_mut(&Position::from(chunk_pos)) {
+                                if !chunk.visible {
+                                    chunk.visible = true;
+                                    chunk_changed = true;
+                                }
+                            } else {
+                                // chunk at new_chunk_pos does not exist (needs to be created)
+
+                                // if chunk_pos.x.get::<G::A>() % 1.0 == 0.0 &&
+                                //     chunk_pos.y.get::<G::A>() % 1.0 == 0.0 &&
+                                //     chunk_pos.z.get::<G::A>() % 1.0 == 0.0 {
+                                //     println!("New chunk loaded [{} {} {} <{}>]",
+                                //              chunk_pos.x.get::<G::A>(),
+                                //              chunk_pos.y.get::<G::A>(),
+                                //              chunk_pos.z.get::<G::A>(),
+                                //              G::A::abbreviation(),
+                                //     );
+                                // }
+
+                                self.load_chunk(chunk_pos);
+                                chunk_changed = true;
+                            }
+                        }
+                        // in the niche case when forced to start, inner chunk sets EXISTING inner chunks to invisible
+                        //  hence, it needs to be after it is generated only in this niche case
+                        if inner_chunk_update {
+                            if let Some(chunk) = self.chunks.get_mut(&Position::from(chunk_pos)) {
+                                if Self::check_inside_radius::<G::B>(&self.inner_central_pos.x, &chunk.pos.x, self.chunk_inner_radius) &&
+                                    Self::check_inside_radius::<G::B>(&self.inner_central_pos.y, &chunk.pos.y, self.chunk_inner_radius) &&
+                                    Self::check_inside_radius::<G::B>(&self.inner_central_pos.z, &chunk.pos.z, self.chunk_inner_radius) {
+                                    // chunk inside inner radius (needs to be 'removed')
+                                    chunk.visible = false;
+                                    chunk_changed = true;
+                                } else if !chunk.visible {
+                                    // not visible but not inside the inner radius? (needs to be added again)
+                                    // assumes all the chunks are generated since inner radius is inside the border radius
+                                    //  where all the chunk generation happens
+                                    // if not, it will just result in empty chunks somehow inside rest of the chunks
+                                    chunk.visible = true;
+                                    chunk_changed = true;
+                                }
+                            }
                         }
                     }
                 }
+            }
+
+            if pos_changed {
+                println!("CHUNK NEED UPDATE: BORDER");
+            }
+            if inner_chunk_update {
+                println!("CHUNK NEED UPDATE: INNER");
             }
 
             chunk_changed
@@ -224,8 +295,11 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
             c.adjacency.front.replace(hash_pos);
         }
 
+        let voxel = self.generator.generate_voxel(pos);
+        let mesh = self.generator.generate_mesh(pos, &voxel);
+
         self.chunks.insert(
-            hash_pos, Chunk::new(pos, hash_pos, self.generator.generate_chunk(pos), adj)
+            hash_pos, Chunk::new(pos, hash_pos, voxel, adj, mesh)
         );
     }
 
@@ -235,23 +309,50 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
 
     // generate the entire aggregated vertices/indices
     pub(crate) fn generate_vertices(&mut self) -> Vec<(Vec<G::V>, Vec<G::I>, RenderDataPurpose)> {
-        self.generator.generate_mesh(&self.chunks)
+        self.generator.aggregate_mesh(&self.chunks)
+    }
+
+    // checks outward
+    fn check_and_update_axis<M: BlockLengthUnit>(central_chunk_axis: &mut Length, new_point_axis: &Length, update_radius: f32) -> bool {
+        if new_point_axis.floor::<M>() < *central_chunk_axis-Length::new::<M>(update_radius) {
+            *central_chunk_axis -= Length::new::<M>(1.0);
+            true
+        } else if *central_chunk_axis+Length::new::<G::B>(update_radius-1.0) < new_point_axis.floor::<M>() {
+            *central_chunk_axis += Length::new::<M>(1.0);
+            true
+        } else {
+            false
+        }
+    }
+
+    // checks inward
+    fn check_inside_radius<M: BlockLengthUnit>(central_chunk_axis: &Length, existing_chunk_axis: &Length, chunk_radius: Option<f32>) -> bool {
+        if let Some(chunk_radius) = chunk_radius {
+            *central_chunk_axis-Length::new::<M>(chunk_radius+1.0) < *existing_chunk_axis &&
+                *existing_chunk_axis < *central_chunk_axis+Length::new::<M>(chunk_radius)
+        } else {
+            false
+        }
     }
 }
 
 
-pub(crate) struct Chunk<P, M: BlockLengthUnit> {
+pub(crate) struct Chunk<P, V, I, M: BlockLengthUnit> {
     pub(crate) voxels: Box<[P]>,
     pub(crate) pos: Length3D,  // south-west corner of the chunk TODO
     pub(crate) hash_pos: Position<M>,
     pub(crate) adjacency: ChunkAdjacency<M>,
+    pub(crate) mesh: Vec<(Vec<V>, Vec<I>, RenderDataPurpose)>,
+    obscured: bool,
     visible: bool,
 }
 
-impl<P, M: BlockLengthUnit> Chunk<P, M> {
-    pub(crate) fn new(pos: Length3D, hash_pos: Position<M>, voxels: Box<[P]>, init_adjs: ChunkAdjacency<M>) -> Self {
+impl<P, V, I, M: BlockLengthUnit> Chunk<P, V, I, M> {
+    pub(crate) fn new(
+        pos: Length3D, hash_pos: Position<M>, voxels: Box<[P]>, init_adjs: ChunkAdjacency<M>, mesh: Vec<(Vec<V>, Vec<I>, RenderDataPurpose)>
+    ) -> Self {
         Self {
-            voxels, pos, visible: true, hash_pos, adjacency: init_adjs,
+            voxels, pos, hash_pos, adjacency: init_adjs, mesh, obscured: false, visible: true,
         }
     }
 

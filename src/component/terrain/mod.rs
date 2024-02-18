@@ -8,7 +8,7 @@ use ash::{Device, vk};
 use noise::NoiseFn;
 use uom::si::f32::Length;
 use winit::event::VirtualKeyCode;
-use crate::chunk_mesh::{ChunkGeneratable, ChunkMesh};
+use crate::chunk_mesh::{ChunkGeneratable, ChunkMesh, ChunkRadius, UpdateChunk};
 use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::component::camera::Length3D;
 use crate::component::terrain::chunk_gen::ChunkGeneratorEF;
@@ -169,42 +169,34 @@ impl Component for Terrain<'static> {
         match event {
             WorldEvent::UserPosition(pos) if !self.spectator_mode => {
                 if let Some(ref mut chunk_mesh) = self.chunk_mesh_ef {
-                    let need_update = chunk_mesh.update(pos);
+                    let need_update = chunk_mesh.update(UpdateChunk::NewPos(pos));
                     self.chunk_update_ef = self.chunk_update_ef || need_update;
                 }
                 if let Some(ref mut chunk_mesh) = self.chunk_mesh_hf {
-                    let need_update = chunk_mesh.update(pos);
+                    let need_update = chunk_mesh.update(UpdateChunk::NewPos(pos));
                     self.chunk_update_hf = self.chunk_update_hf || need_update;
                 }
             }
             WorldEvent::NewTextureMapper(txtr_mapper) => {
                 let mut chunk_mesh_ef = ChunkMesh::new(
-                    Length3D {
-                        x: Length::new::<blox>(0.0),
-                        y: Length::new::<blox>(0.0),
-                        z: Length::new::<blox>(0.0),
-                    },
-                    4, 2,
+                    Length3D::origin(),
+                    ChunkRadius(4, 2), None,
                     ChunkGeneratorEF::new(
                         self.block_ind.clone(), txtr_mapper.clone()
                     ),
                 );
                 let mut chunk_mesh_hf = ChunkMesh::new(
-                    Length3D {
-                        x: Length::new::<blox>(0.0),
-                        y: Length::new::<blox>(0.0),
-                        z: Length::new::<blox>(0.0),
-                    },
-                    2, 1,
+                    Length3D::origin(),
+                    ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
                     ChunkGeneratorHF::new(
                         self.block_ind.clone(), txtr_mapper.clone()
                     ),
                 );
 
-                // chunk_mesh_ef.initialize();
-                chunk_mesh_hf.initialize();
+                chunk_mesh_ef.update(UpdateChunk::Forced);
+                chunk_mesh_hf.update(UpdateChunk::Forced);
 
-                // self.chunk_mesh_ef.replace(chunk_mesh_ef);
+                self.chunk_mesh_ef.replace(chunk_mesh_ef);
                 self.chunk_mesh_hf.replace(chunk_mesh_hf);
             }
             WorldEvent::SpectatorMode(enabled) => {
@@ -222,14 +214,17 @@ impl Component for Terrain<'static> {
         let mut any_chunk_update = false;
         let mut render_data: Vec<(Vec<ChunkVertex>, Vec<u32>, RenderDataPurpose)> = Vec::new();
 
-        let mut data_aggregator = |rd| {
-            for (mut verts, mut inds, purpose) in rd {
+        let mut data_aggregator = |rd: Vec<(Vec<ChunkVertex>, Vec<u32>, RenderDataPurpose)>| {
+            for (mut verts, inds, purpose) in rd {
                 // TODO: aggregate all vertex & index (w/ proper ofs computed here) to a parent vector (verts, inds, purpose)
                 let mut appended = false;
                 for (v, i, p) in render_data.iter_mut() {
                     if *p == purpose {
+                        let ind_count = v.len() as u32;
+                        let mut offsetted_ind = inds.iter().map(|i| i+ind_count).collect();
+
                         v.append(&mut verts);
-                        i.append(&mut inds);
+                        i.append(&mut offsetted_ind);
                         appended = true;
                         break;
                     }
