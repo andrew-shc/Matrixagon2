@@ -59,12 +59,35 @@ impl TerrainGenerator {
     }
 
     // floral block placement-NBT
+    pub(super) fn floral_existence_bound_test(&self, x: f64, z: f64) -> Option<f64> {
+        let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
+        let floralness = self.floral_noise.get([x/40.0, z/40.0]);
+
+        if base_level > Self::SEA_LEVEL {
+            if 0.8 <= floralness && floralness <= 0.9 {
+                if 0.84 <= floralness && floralness <= 0.86 {
+                    Some(base_level)
+                } else {
+                    Some(base_level)
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 
     // TODO: FLUID NBTs ARE TEMPORARY (FOR FUTURE BETTER FLUID GENERATION, RENDERING, & NEW SIM)
     // fluid block placement-NBT
-    pub(super) fn fluid_height_existence_bound_test(&self, x: f64, z: f64) -> f64 {
+    pub(super) fn fluid_height_existence_bound_test(&self, x: f64, z: f64) -> Option<f64> {
         let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
 
-        base_level
+        // covers base_level+1.0
+        if base_level <= Self::SEA_LEVEL {
+            Some(Self::SEA_LEVEL)
+        } else {
+            None
+        }
     }
 }

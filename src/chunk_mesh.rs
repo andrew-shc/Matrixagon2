@@ -1,15 +1,12 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::slice::Chunks;
-use uom::fmt::DisplayStyle;
 use uom::num_traits::Float;
 use uom::si::f32::Length;
 use uom::si::Unit;
 use crate::component::camera::{Length3D};
 use crate::component::RenderDataPurpose;
 use crate::component::terrain::FaceDir;
-use crate::measurement::chux_hf;
 
 
 pub(crate) trait BlockLengthUnit: uom::si::length::Unit + uom::Conversion<f32, T = f32> {}
@@ -19,13 +16,10 @@ impl<T> BlockLengthUnit for T where T: uom::si::length::Unit + uom::Conversion<f
 pub(crate) trait ChunkGeneratable {
     type A: BlockLengthUnit;  // border outer radius
     type B: BlockLengthUnit;  // empty inner radius
-    type P;
     type V;
     type I;
-    fn generate_voxel(&self, pos: Length3D) -> Box<[Self::P]>;
-    fn generate_mesh(&self, pos: Length3D, voxels: &[Self::P])
-        -> Vec<(Vec<Self::V>, Vec<Self::I>, Option<FaceDir>, RenderDataPurpose)>;
-    fn aggregate_mesh(&self, central_pos: Length3D, chunks: &HashMap<Position<Self::B>, Chunk<Self::P, Self::V, Self::I, Self::B>>)
+    fn generate_mesh(&self, pos: Length3D) -> Vec<(Vec<Self::V>, Vec<Self::I>, Option<FaceDir>, RenderDataPurpose)>;
+    fn aggregate_mesh(&self, central_pos: Length3D, chunks: &HashMap<Position<Self::B>, Chunk<Self::V, Self::I, Self::B>>)
         -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>;
 }
 
@@ -103,7 +97,7 @@ pub(crate) struct ChunkMesh<G: ChunkGeneratable> {
     chunk_inner_update_radius: Option<f32>,
 
     generator: G,
-    chunks: HashMap<Position<G::B>, Chunk<G::P, G::V, G::I, G::B>>,
+    chunks: HashMap<Position<G::B>, Chunk<G::V, G::I, G::B>>,
     chunk_adjacency: Vec<ChunkAdjacency<G::B>>,
 }
 
@@ -269,11 +263,10 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
             c.adjacency.front.replace(hash_pos);
         }
 
-        let voxel = self.generator.generate_voxel(pos);
-        let mesh = self.generator.generate_mesh(pos, &voxel);
+        let mesh = self.generator.generate_mesh(pos);
 
         self.chunks.insert(
-            hash_pos, Chunk::new(pos, hash_pos, voxel, adj, mesh)
+            hash_pos, Chunk::new(pos, hash_pos, adj, mesh)
         );
     }
 
@@ -311,8 +304,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
 }
 
 
-pub(crate) struct Chunk<P, V, I, M: BlockLengthUnit> {
-    pub(crate) voxels: Box<[P]>,
+pub(crate) struct Chunk<V, I, M: BlockLengthUnit> {
     pub(crate) pos: Length3D,  // south-west corner of the chunk TODO
     pub(crate) hash_pos: Position<M>,
     pub(crate) adjacency: ChunkAdjacency<M>,
@@ -320,16 +312,15 @@ pub(crate) struct Chunk<P, V, I, M: BlockLengthUnit> {
     visible: bool,
 }
 
-impl<P, V, I, M: BlockLengthUnit> Chunk<P, V, I, M> {
+impl<V, I, M: BlockLengthUnit> Chunk<V, I, M> {
     pub(crate) fn new(
         pos: Length3D,
         hash_pos: Position<M>,
-        voxels: Box<[P]>,
         init_adjs: ChunkAdjacency<M>,
         mesh: Vec<(Vec<V>, Vec<I>, Option<FaceDir>, RenderDataPurpose)>,
     ) -> Self {
         Self {
-            voxels, pos, hash_pos, adjacency: init_adjs, mesh, visible: true,
+            pos, hash_pos, adjacency: init_adjs, mesh, visible: true,
         }
     }
 

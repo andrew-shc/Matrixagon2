@@ -1,10 +1,8 @@
 use std::mem;
 use std::rc::Rc;
-use crate::component::camera::Length3D;
 use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir, TextureMapper};
 use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::component::texture::TextureIDMapper;
-use crate::measurement::blox;
 use crate::shader::chunk::ChunkVertex;
 
 
@@ -34,7 +32,7 @@ pub(super) trait ChunkMeshUtil<'b> {
             mem::discriminant(&block) == mem::discriminant(&BlockCullType::Obscured)
     }
 
-    fn voluminous_opaque_blocks_mesh<C>(&self, ofs: (i32, i32, i32), chunk_pos: C) -> [(Vec<ChunkVertex>, Vec<u32>, FaceDir); 6]
+    fn voluminous_opaque_cubes_mesh<C>(&self, ofs: (i32, i32, i32), chunk_pos: C) -> [(Vec<ChunkVertex>, Vec<u32>, FaceDir); 6]
         where C: Fn(u32, u32, u32) -> (f32, f32, f32)
     {
         let mut top_verts = vec![];
@@ -84,16 +82,16 @@ pub(super) trait ChunkMeshUtil<'b> {
                 let hb = self.terrain_gen().opaque_block_height_bound_test((ofs.0+x as i32) as f64, (ofs.2+z as i32) as f64).ceil() as i32;
                 xz_max_height_bounds[(x*expanded_size+z) as usize] = hb;
                 if hb > max_height_bound as i32+ofs.1 {
-                    max_height_bound = (hb.clamp(ofs.1, ofs.1+expanded_size as i32)-ofs.1) as u32;
+                    max_height_bound = (hb-ofs.1).clamp(0i32, expanded_size as i32) as u32;
                 }
                 if hb < min_height_bound as i32+ofs.1 {
-                    min_height_bound = (hb.clamp(ofs.1, ofs.1+expanded_size as i32)-ofs.1) as u32;
+                    min_height_bound = (hb-ofs.1).clamp(0i32, expanded_size as i32) as u32;
                 }
             }
         }
 
         // incremented max height bound to do the final block check vertically, for those faces on the top edge
-        max_height_bound = ((max_height_bound as isize+1).clamp(ofs.1 as isize, ofs.1 as isize+expanded_size as isize)-ofs.1 as isize) as u32;
+        max_height_bound = (max_height_bound+1).clamp(0u32, expanded_size);
 
         // println!("HB MIN: {:?} MAX: {:?}", min_height_bound, max_height_bound);
 
@@ -241,6 +239,46 @@ pub(super) trait ChunkMeshUtil<'b> {
         ]
     }
 
+    fn sparse_transparent_floral_mesh<C>(&self, ofs: (i32, i32, i32), chunk_pos: C) -> (Vec<ChunkVertex>, Vec<u32>)
+        where C: Fn(u32, u32, u32) -> (f32, f32, f32)
+    {
+        let mut transparent_verts = vec![];
+        let mut transparent_inds = vec![];
+        let mut transparent_faces = 0;
+
+        for x in 0..self.chunk_size() {
+            for z in 0..self.chunk_size() {
+                if let Some(y) = self.terrain_gen().floral_existence_bound_test((ofs.0+x as i32) as f64, (ofs.2+z as i32) as f64) {
+                    let y = y.ceil();
+                    if ofs.1 as f64 <= y && y < ofs.1 as f64+self.chunk_size() as f64 {
+                        if let
+                            BlockCullType::BorderVisible0(block) |
+                            BlockCullType::BorderVisibleFluid0(block) |
+                            BlockCullType::AlwaysVisible(block)
+                            = self.terrain_gen().get_block((ofs.0+x as i32) as f64, (ofs.1+y as i32) as f64, (ofs.2+z as i32) as f64)
+                        {
+                            // assumes floral mesh
+
+                            let block = self.block_ind(block.0 as usize);
+
+                            let txtr = block.texture_id;
+
+                            let (mut xcross_verts, mut xcross_inds) = self.gen_xcross(
+                                chunk_pos(x, y as u32, z), transparent_faces*4, txtr,
+                            );
+                            transparent_verts.append(&mut xcross_verts);
+                            transparent_inds.append(&mut xcross_inds);
+                            transparent_faces += 2;
+                        }
+                    }
+                };
+            }
+        }
+
+        (transparent_verts, transparent_inds)
+    }
+
+
     fn temporary_fluid_mesher<C>(&self, ofs: (i32, i32, i32), chunk_pos: C) -> (Vec<ChunkVertex>, Vec<u32>)
         where C: Fn(u32, u32, u32) -> (f32, f32, f32)
     {
@@ -250,24 +288,26 @@ pub(super) trait ChunkMeshUtil<'b> {
 
         let expanded_size = self.chunk_size()+1;
 
-        let mut xy_grid: Vec<u16> = vec![0u16; (expanded_size*expanded_size) as usize];
-        let mut yz_grid: Vec<u16> = vec![0u16; (expanded_size*expanded_size) as usize];
         let mut xz_grid: Vec<u16> = vec![0u16; (expanded_size*expanded_size) as usize];
 
-        let mut xz_max_height_bounds = vec![0i32; (expanded_size*expanded_size) as usize];
+        let mut xz_max_height_bounds = vec![None; (expanded_size*expanded_size) as usize];
         let mut min_height_bound = expanded_size;
         let mut max_height_bound = 0u32;
 
         for x in 0..expanded_size {
             for z in 0..expanded_size {
-                let hb = self.terrain_gen().opaque_block_height_bound_test((ofs.0+x as i32) as f64, (ofs.2+z as i32) as f64).ceil() as i32;
-                xz_max_height_bounds[(x*expanded_size+z) as usize] = hb;
-                if hb > max_height_bound as i32+ofs.1 {
-                    max_height_bound = (hb.clamp(ofs.1, ofs.1+expanded_size as i32)-ofs.1) as u32;
-                }
-                if hb < min_height_bound as i32+ofs.1 {
-                    min_height_bound = (hb.clamp(ofs.1, ofs.1+expanded_size as i32)-ofs.1) as u32;
-                }
+                if let Some(hb) = self.terrain_gen().fluid_height_existence_bound_test((ofs.0+x as i32) as f64, (ofs.2+z as i32) as f64) {
+                    let hb = hb.ceil() as i32;
+                    xz_max_height_bounds[(x*expanded_size+z) as usize] = Some(hb);
+                    if hb > max_height_bound as i32+ofs.1 {
+                        max_height_bound = (hb.clamp(ofs.1, ofs.1+expanded_size as i32)-ofs.1) as u32;
+                    }
+                    if hb < min_height_bound as i32+ofs.1 {
+                        min_height_bound = (hb.clamp(ofs.1, ofs.1+expanded_size as i32)-ofs.1) as u32;
+                    }
+                } else {
+                    xz_max_height_bounds[(x*expanded_size+z) as usize] = None;
+                };
             }
         }
 
@@ -276,137 +316,78 @@ pub(super) trait ChunkMeshUtil<'b> {
 
         // println!("HB MIN: {:?} MAX: {:?}", min_height_bound, max_height_bound);
 
-        // for x == 0, set cells to start with closed
-        for y in 0..min_height_bound {
-            let mut xy_cell = &mut xy_grid[(0*expanded_size+y) as usize];
-            if *xy_cell%2 == 0 {
-                *xy_cell += 1;
-            }
-        }
         for x in 0..expanded_size {
-            // for z == 0, set cells to start with closed
-            for y in 0..min_height_bound {
-                let mut yz_cell = &mut yz_grid[(y*expanded_size+0) as usize];
-                if *yz_cell%2 == 0 {
-                    *yz_cell += 1;
-                }
-            }
             for z in 0..expanded_size {
                 // let height = opaque_block_max_height_bounds((x_ofs+x as i32) as f64, (z_ofs+z as i32) as f64).ceil() as isize;
-                let height = xz_max_height_bounds[(x*expanded_size+z) as usize];
-
-                // TODO: multiple height bounds when we add caves, overhangs, trees/models, etc.
-
-                // for y == 0, set cells to start with closed
-                let mut xz_cell = &mut xz_grid[(x*expanded_size+z) as usize];
-                if *xz_cell%2 == 0 {
-                    *xz_cell += 1;
-                }
-
-                for y in min_height_bound..max_height_bound {
-                    let open = ofs.1+y as i32 >= height;
-                    let mut xy_cell = &mut xy_grid[(x*expanded_size+y) as usize];
-                    let mut yz_cell = &mut yz_grid[(y*expanded_size+z) as usize];
+                if let Some(height) = xz_max_height_bounds[(x*expanded_size+z) as usize] {
+                    // TODO
+                    // for y == 0, set cells to start with closed
                     let mut xz_cell = &mut xz_grid[(x*expanded_size+z) as usize];
-
-                    let lazy_block_gen = |dx: i32, dy: i32, dz: i32| {
-                        self.terrain_gen().get_block((ofs.0+dx+x as i32) as f64, (ofs.1+dy+y as i32) as f64, (ofs.2+dz+z as i32) as f64)
-                    };
-
-                    let mut fast_face_gen = |
-                        total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
-                        dx, dy, dz, face_dir, txtr_mapping
-                    | {
-                        if self.check_coord_within_chunk(x as i32+dx,y as i32+dy,z as i32+dz) {
-                            let (mut verts, mut inds) = self.gen_face(
-                                chunk_pos((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32),
-                                *total_faces*4, face_dir, txtr_mapping, false
-                            );
-                            total_verts.append(&mut verts);
-                            total_inds.append(&mut inds);
-                            *total_faces += 1;
-                        }
-                    };
-
-                    let mut fast_block_face_gen = |block, verts, inds, faces, dx: i32, dy: i32, dz: i32, face_dir| {
-                        if let
-                            BlockCullType::BorderVisible0(block) |
-                            BlockCullType::BorderVisibleFluid0(block) |
-                            BlockCullType::AlwaysVisible(block)
-                            = &block
-                        {
-                            let block = self.block_ind(block.0 as usize);
-                            let txtr = block.texture_id;
-
-                            // mesh assumed to be (opaque) cube
-                            fast_face_gen(verts, inds, faces, dx, dy, dz, face_dir, txtr);
-                        }
-                    };
-
-                    if *xy_cell%2 == 1 && open {
-                        // current hit cell is set to closed that needs to be opened at the previous block index
-                        *xy_cell += 1;
-                        fast_block_face_gen(
-                            lazy_block_gen(0, 0,-1),
-                            &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
-                            0, 0,-1, FaceDir::FRONT
-                        );
-                    } else if *xy_cell%2 == 0 && !open {
-                        // current hit cell is set to opened that needs to be closed at the current block index
-                        *xy_cell += 1;
-
-                        if z > 0 || (z == 0 && !Self::check_block_obscured(lazy_block_gen(0, 0,-1))) {
-                            fast_block_face_gen(
-                                lazy_block_gen(0, 0, 0),
-                                &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
-                                0, 0, 0, FaceDir::BACK
-                            );
-                        }
-                    }
-
-                    if *yz_cell%2 == 1 && open {
-                        // current hit cell is set to closed that needs to be opened at the previous block index
-                        *yz_cell += 1;
-                        fast_block_face_gen(
-                            lazy_block_gen(-1, 0, 0),
-                            &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
-                            -1, 0, 0, FaceDir::RIGHT
-                        );
-                    } else if *yz_cell%2 == 0 && !open {
-                        // current hit cell is set to opened that needs to be closed at the current block index
-                        *yz_cell += 1;
-
-                        if x > 0 || (x == 0 && !Self::check_block_obscured(lazy_block_gen(-1, 0, 0))) {
-                            fast_block_face_gen(
-                                lazy_block_gen(0, 0, 0),
-                                &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
-                                0, 0, 0, FaceDir::LEFT
-                            );
-                        }
-                    }
-
-                    if *xz_cell%2 == 1 && open {
-                        // current hit cell is set to closed that needs to be opened at the previous block index
+                    if *xz_cell%2 == 0 {
                         *xz_cell += 1;
-                        fast_block_face_gen(
-                            lazy_block_gen( 0,-1, 0),
-                            &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
-                            0, -1, 0, FaceDir::TOP
-                        );
-                    } else if *xz_cell%2 == 0 && !open {
-                        // current hit cell is set to opened that needs to be closed at the current block index
-                        *xz_cell += 1;
+                    }
 
-                        if y > 0 || (y == 0 && !Self::check_block_obscured(lazy_block_gen( 0,-1, 0))) {
+                    for y in min_height_bound..max_height_bound {
+                        let open = ofs.1+y as i32 >= height;
+                        let mut xz_cell = &mut xz_grid[(x*expanded_size+z) as usize];
+
+                        let lazy_block_gen = |dx: i32, dy: i32, dz: i32| {
+                            self.terrain_gen().get_block((ofs.0+dx+x as i32) as f64, (ofs.1+dy+y as i32) as f64, (ofs.2+dz+z as i32) as f64)
+                        };
+
+                        let mut fast_face_gen = |
+                            total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
+                            dx, dy, dz, face_dir, txtr_mapping
+                        | {
+                            if self.check_coord_within_chunk(x as i32+dx,y as i32+dy,z as i32+dz) {
+                                let (mut verts, mut inds) = self.gen_face(
+                                    chunk_pos((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32),
+                                    *total_faces*4, face_dir, txtr_mapping, false
+                                );
+                                total_verts.append(&mut verts);
+                                total_inds.append(&mut inds);
+                                *total_faces += 1;
+                            }
+                        };
+
+                        let mut fast_block_face_gen = |block, verts, inds, faces, dx: i32, dy: i32, dz: i32, face_dir| {
+                            if let
+                                BlockCullType::BorderVisible0(block) |
+                                BlockCullType::BorderVisibleFluid0(block) |
+                                BlockCullType::AlwaysVisible(block)
+                                = &block
+                            {
+                                let block = self.block_ind(block.0 as usize);
+                                let txtr = block.texture_id;
+
+                                // mesh assumed to be (opaque) cube
+                                fast_face_gen(verts, inds, faces, dx, dy, dz, face_dir, txtr);
+                            }
+                        };
+
+                        if *xz_cell%2 == 1 && open {
+                            // current hit cell is set to closed that needs to be opened at the previous block index
+                            *xz_cell += 1;
                             fast_block_face_gen(
-                                lazy_block_gen(0, 0, 0),
+                                lazy_block_gen( 0,-1, 0),
                                 &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
-                                0, 0, 0, FaceDir::BOTTOM
+                                0, -1, 0, FaceDir::TOP
                             );
+                        } else if *xz_cell%2 == 0 && !open {
+                            // current hit cell is set to opened that needs to be closed at the current block index
+                            *xz_cell += 1;
+
+                            if y > 0 || (y == 0 && !Self::check_block_obscured(lazy_block_gen( 0,-1, 0))) {
+                                fast_block_face_gen(
+                                    lazy_block_gen(0, 0, 0),
+                                    &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
+                                    0, 0, 0, FaceDir::BOTTOM
+                                );
+                            }
                         }
                     }
+                    xz_grid[(x*expanded_size+z) as usize] += 1;
                 }
-                xz_grid[(x*expanded_size+z) as usize] += 1;
             }
         }
 

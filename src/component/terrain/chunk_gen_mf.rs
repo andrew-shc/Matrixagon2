@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use noise::{NoiseFn, Perlin, Simplex};
+use noise::{NoiseFn, Perlin};
 use uom::si::f32::Length;
 use crate::chunk_mesh::{Chunk, ChunkGeneratable, Position};
 use crate::component::camera::Length3D;
 use crate::component::RenderDataPurpose;
-use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir, MeshType, TransparencyType};
+use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir};
 use crate::component::terrain::mesh_util::ChunkMeshUtil;
 use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::component::texture::TextureIDMapper;
@@ -20,9 +20,6 @@ pub(super) struct ChunkGeneratorMF<'b>  {
 }
 
 impl<'b> ChunkGeneratorMF<'b> {
-    const SEA_LEVEL: f64 = 10.0;
-    const SAND_LEVEL: f64 = 13.0;
-
     pub(super) fn new(block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper, terrain_gen: Rc<TerrainGenerator>) -> Self {
         Self {
             chunk_size: Length::new::<<Self as ChunkGeneratable>::B>(1.0).get::<blox>() as u32, block_ind, txtr_id_mapper,
@@ -48,21 +45,21 @@ impl<'b> ChunkMeshUtil<'b> for ChunkGeneratorMF<'b> {
 impl ChunkGeneratable for ChunkGeneratorMF<'_> {
     type A = chux_mf;
     type B = chux_hf;
-    type P = BlockCullType;
+    // type P = BlockCullType;
     type V = ChunkVertex;
     type I = u32;
 
-    fn generate_voxel(&self, pos: Length3D) -> Box<[Self::P]> {
-        // println!("GEN VOXEL? [MF]");
+    // fn generate_voxel(&self, pos: Length3D) -> Box<[Self::P]> {
+    //     // println!("GEN VOXEL? [MF]");
+    //
+    //     let mut raw_voxels = vec![];
+    //
+    //     let mut voxel = raw_voxels.into_boxed_slice();
+    //
+    //     voxel
+    // }
 
-        let mut raw_voxels = vec![];
-
-        let mut voxel = raw_voxels.into_boxed_slice();
-
-        voxel
-    }
-
-    fn generate_mesh(&self, pos: Length3D, voxels: &[Self::P]) -> Vec<(Vec<Self::V>, Vec<Self::I>, Option<FaceDir>, RenderDataPurpose)> {
+    fn generate_mesh(&self, pos: Length3D) -> Vec<(Vec<Self::V>, Vec<Self::I>, Option<FaceDir>, RenderDataPurpose)> {
         // println!("[MF] GEN CHUNK MESH: {:?}", pos);
         // let mut opaque_verts = vec![];
         // let mut opaque_inds = vec![];
@@ -331,27 +328,31 @@ impl ChunkGeneratable for ChunkGeneratorMF<'_> {
         //     }
         // }
 
-        let opaque_cube_mesh = self.voluminous_opaque_blocks_mesh(
-            (pos.x.get::<blox>().ceil() as i32, pos.y.get::<blox>().ceil() as i32, pos.z.get::<blox>().ceil() as i32),
-            |x: u32, y: u32, z: u32| (
-                pos.x.get::<blox>()+x as f32,
-                pos.y.get::<blox>()+y as f32,
-                -pos.z.get::<blox>()-z as f32
-            )
+        let ofs = (pos.x.get::<blox>().ceil() as i32, pos.y.get::<blox>().ceil() as i32, pos.z.get::<blox>().ceil() as i32);
+        let chunk_pos = |x: u32, y: u32, z: u32| (
+            pos.x.get::<blox>()+x as f32,
+            pos.y.get::<blox>()+y as f32,
+            -pos.z.get::<blox>()-z as f32
         );
+
+        let opaque_cube_mesh = self.voluminous_opaque_cubes_mesh(ofs, chunk_pos);
+        let transparent_floral_mesh = self.sparse_transparent_floral_mesh(ofs, chunk_pos);
+        let translucent_fluid_mesh = self.temporary_fluid_mesher(ofs, chunk_pos);
 
         let mut all_mesh = Vec::new();
 
         for (v, i, f) in opaque_cube_mesh {
             all_mesh.push((v, i, Some(f), RenderDataPurpose::TerrainOpaque))
         }
+        all_mesh.push((transparent_floral_mesh.0, transparent_floral_mesh.1, None, RenderDataPurpose::TerrainTransparent));
+        all_mesh.push((translucent_fluid_mesh.0, translucent_fluid_mesh.1, None, RenderDataPurpose::TerrainTranslucent));
 
         all_mesh
     }
 
     fn aggregate_mesh(&self,
                       central_pos: Length3D,
-                      chunks: &HashMap<Position<Self::B>, Chunk<Self::P, Self::V, Self::I, Self::B>>
+                      chunks: &HashMap<Position<Self::B>, Chunk<Self::V, Self::I, Self::B>>
     ) -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>
     {
         println!("[MF] GEN AGGREGATED MESH");

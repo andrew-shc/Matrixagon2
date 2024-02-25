@@ -19,7 +19,6 @@
 #[macro_use]
 extern crate uom;
 
-use std::env;
 use std::path::Path;
 use std::time::Instant;
 use ash::vk;
@@ -39,7 +38,7 @@ use crate::world::{World, WorldEvent};
 use crate::component::terrain::{BlockData, MeshType, Terrain, TextureMapper, TransparencyType};
 use crate::component::texture::TextureHandler;
 use crate::component::tick::TickSync;
-use crate::measurement::{blox, chux};
+use crate::measurement::{blox};
 use crate::shader::chunk::ChunkRasterizer;
 use crate::shader::Shader;
 use crate::swapchain::{best_surface_color_and_depth_format, SwapchainManager};
@@ -215,6 +214,12 @@ impl MatrixagonApp {
                     texture_id: TextureMapper::All("water"),
                     mesh: MeshType::Fluid,
                     transparency: TransparencyType::Translucent,
+                },
+                BlockData {
+                    ident: "air",
+                    texture_id: TextureMapper::All("null"),
+                    mesh: MeshType::Empty,
+                    transparency: TransparencyType::Transparent,
                 },
             ])),
             Box::new(DebugUI::new(handler.vi.clone(), handler.device.clone(), init_raw_input)),

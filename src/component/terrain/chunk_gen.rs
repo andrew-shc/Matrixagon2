@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::mem;
 use std::rc::Rc;
-use noise::{NoiseFn, Perlin, Simplex};
+use noise::{NoiseFn};
 use uom::si::f32::Length;
 use crate::chunk_mesh::{Chunk, Position, ChunkGeneratable};
 use crate::component::camera::Length3D;
 use crate::component::RenderDataPurpose;
-use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir, MeshType, TextureMapper, TransparencyType};
+use crate::component::terrain::{BlockCullType, BlockData, FaceDir, MeshType, TransparencyType};
 use crate::component::terrain::mesh_util::{ChunkMeshUtil};
 use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::component::texture::TextureIDMapper;
@@ -23,9 +22,6 @@ pub(super) struct ChunkGeneratorEF<'b> {
 }
 
 impl<'b> ChunkGeneratorEF<'b> {
-    const SEA_LEVEL: f64 = 10.0;
-    const SAND_LEVEL: f64 = 13.0;
-
     pub(super) fn new(block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper, terrain_gen: Rc<TerrainGenerator>) -> Self {
         Self {
             chunk_size: Length::new::<<Self as ChunkGeneratable>::B>(1.0).get::<blox>() as u32, block_ind, txtr_id_mapper,
@@ -52,173 +48,194 @@ impl<'b> ChunkMeshUtil<'b> for ChunkGeneratorEF<'b> {
 impl ChunkGeneratable for ChunkGeneratorEF<'_> {
     type A = chux;
     type B = chux;
-    type P = BlockCullType;
+    // type P = BlockCullType;
     type V = ChunkVertex;
     type I = u32;
 
-    fn generate_voxel(&self, pos: Length3D) -> Box<[Self::P]> {
-        // println!("GEN VOXEL");
-        let mut raw_voxels = Vec::with_capacity((self.chunk_size*self.chunk_size*self.chunk_size) as usize);
-        let pos: Position<blox> = pos.into();
+    // fn generate_voxel(&self, pos: Length3D) -> Box<[Self::P]> {
+    //     // println!("GEN VOXEL");
+    //     let mut raw_voxels = Vec::with_capacity((self.chunk_size*self.chunk_size*self.chunk_size) as usize);
+    //     let pos: Position<blox> = pos.into();
+    //
+    //     for y in pos.y..pos.y+self.chunk_size() as isize {
+    //         for x in pos.x..pos.x+self.chunk_size() as isize {
+    //             for z in pos.z..pos.z+self.chunk_size() as isize {
+    //                 raw_voxels.push(self.terrain_gen.get_block(x as f64, y as f64, z as f64));
+    //                 // raw_voxels.push({
+    //                 //     // TERRAIN GENERATION (NO SIDE EFFECT)
+    //                 //     let (x,y,z) = (x as f64, y as f64, z as f64);
+    //                 //
+    //                 //     let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
+    //                 //     let floralness = self.floral_noise.get([x/40.0, z/40.0]);
+    //                 //
+    //                 //     if y > base_level+1.0 {
+    //                 //         if y <= Self::SEA_LEVEL {
+    //                 //             BlockCullType::BorderVisibleFluid0(Block(6))
+    //                 //         } else {
+    //                 //             BlockCullType::Empty
+    //                 //         }
+    //                 //     } else if y > base_level {
+    //                 //         if y <= Self::SEA_LEVEL {
+    //                 //             BlockCullType::BorderVisibleFluid0(Block(6))
+    //                 //         } else if 0.8 < floralness && floralness < 0.9 {
+    //                 //             if 0.84 < floralness && floralness < 0.86 {
+    //                 //                 BlockCullType::AlwaysVisible(Block(5))
+    //                 //             } else {
+    //                 //                 BlockCullType::AlwaysVisible(Block(4))
+    //                 //             }
+    //                 //         } else {
+    //                 //             BlockCullType::Empty
+    //                 //         }
+    //                 //     } else if y < Self::SAND_LEVEL {
+    //                 //         BlockCullType::BorderVisible0(Block(3))
+    //                 //     } else if y > base_level-1.0 {
+    //                 //         BlockCullType::BorderVisible0(Block(0))
+    //                 //     } else if y > base_level-3.0 {
+    //                 //         BlockCullType::BorderVisible0(Block(1))
+    //                 //     } else {
+    //                 //         BlockCullType::BorderVisible0(Block(2))
+    //                 //     }
+    //                 //
+    //                 //     // if y > (x/20.0).sin()*10.0+(z/20.0).sin()*10.0  {
+    //                 //     //     BlockCullType::Empty
+    //                 //     // } else {
+    //                 //     //     BlockCullType::Opaque(Block(0))
+    //                 //     // }
+    //                 //     // if y as f64 > noise.get([x, z])  {
+    //                 //     //     BlockGen::Empty
+    //                 //     // } else {
+    //                 //     //     BlockGen::Opaque(Block(0))
+    //                 //     // }
+    //                 // })
+    //             }
+    //         }
+    //     }
+    //     let mut voxel = raw_voxels.into_boxed_slice();
+    //
+    //     self.block_culling(&mut voxel);
+    //
+    //     voxel
+    // }
 
-        for y in pos.y..pos.y+self.chunk_size() as isize {
-            for x in pos.x..pos.x+self.chunk_size() as isize {
-                for z in pos.z..pos.z+self.chunk_size() as isize {
-                    raw_voxels.push(self.terrain_gen.get_block(x as f64, y as f64, z as f64));
-                    // raw_voxels.push({
-                    //     // TERRAIN GENERATION (NO SIDE EFFECT)
-                    //     let (x,y,z) = (x as f64, y as f64, z as f64);
-                    //
-                    //     let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
-                    //     let floralness = self.floral_noise.get([x/40.0, z/40.0]);
-                    //
-                    //     if y > base_level+1.0 {
-                    //         if y <= Self::SEA_LEVEL {
-                    //             BlockCullType::BorderVisibleFluid0(Block(6))
-                    //         } else {
-                    //             BlockCullType::Empty
-                    //         }
-                    //     } else if y > base_level {
-                    //         if y <= Self::SEA_LEVEL {
-                    //             BlockCullType::BorderVisibleFluid0(Block(6))
-                    //         } else if 0.8 < floralness && floralness < 0.9 {
-                    //             if 0.84 < floralness && floralness < 0.86 {
-                    //                 BlockCullType::AlwaysVisible(Block(5))
-                    //             } else {
-                    //                 BlockCullType::AlwaysVisible(Block(4))
-                    //             }
-                    //         } else {
-                    //             BlockCullType::Empty
-                    //         }
-                    //     } else if y < Self::SAND_LEVEL {
-                    //         BlockCullType::BorderVisible0(Block(3))
-                    //     } else if y > base_level-1.0 {
-                    //         BlockCullType::BorderVisible0(Block(0))
-                    //     } else if y > base_level-3.0 {
-                    //         BlockCullType::BorderVisible0(Block(1))
-                    //     } else {
-                    //         BlockCullType::BorderVisible0(Block(2))
-                    //     }
-                    //
-                    //     // if y > (x/20.0).sin()*10.0+(z/20.0).sin()*10.0  {
-                    //     //     BlockCullType::Empty
-                    //     // } else {
-                    //     //     BlockCullType::Opaque(Block(0))
-                    //     // }
-                    //     // if y as f64 > noise.get([x, z])  {
-                    //     //     BlockGen::Empty
-                    //     // } else {
-                    //     //     BlockGen::Opaque(Block(0))
-                    //     // }
-                    // })
-                }
-            }
-        }
-        let mut voxel = raw_voxels.into_boxed_slice();
-
-        self.block_culling(&mut voxel);
-
-        voxel
-    }
-
-    fn generate_mesh(&self, pos: Length3D, voxels: &[Self::P])
+    fn generate_mesh(&self, pos: Length3D)
         -> Vec<(Vec<Self::V>, Vec<Self::I>, Option<FaceDir>, RenderDataPurpose)>
     {
         // println!("GEN CHUNK MESH");
-        let mut opaque_verts = vec![];
-        let mut opaque_inds = vec![];
-        let mut opaque_faces = 0;
-        let mut transparent_verts = vec![];
-        let mut transparent_inds = vec![];
-        let mut transparent_faces = 0;
-        let mut translucent_verts = vec![];
-        let mut translucent_inds = vec![];
-        let mut translucent_faces = 0;
+        // let mut opaque_verts = vec![];
+        // let mut opaque_inds = vec![];
+        // let mut opaque_faces = 0;
+        // let mut transparent_verts = vec![];
+        // let mut transparent_inds = vec![];
+        // let mut transparent_faces = 0;
+        // let mut translucent_verts = vec![];
+        // let mut translucent_inds = vec![];
+        // let mut translucent_faces = 0;
+        //
+        // let chunk_pos = |x: u32, y: u32, z: u32| (
+        //     pos.x.get::<blox>()+x as f32,
+        //     pos.y.get::<blox>()+y as f32,
+        //     -pos.z.get::<blox>()-z as f32
+        // );
+        //
+        // for x in 0..self.chunk_size {
+        //     for y in 0..self.chunk_size {
+        //         for z in 0..self.chunk_size {
+        //             let mut local_checked_gen_face = |
+        //                 total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
+        //                 dx, dy, dz, face_dir, txtr_mapping, fluid: bool, border_always_clear: bool| {
+        //                 if self.check_coord_within_chunk(x as i32+dx,y as i32+dy,z as i32+dz) {
+        //                     // inner face mesh culling
+        //                     let block_cull = voxels[self.access((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32)];
+        //                     if (!fluid && !Self::check_block_obscured(block_cull)) || (fluid && !Self::check_fluid_obscured(block_cull)) {
+        //                         // if delta face coord is in chunk and not obscured
+        //                         let (mut verts, mut inds) = self.gen_face(
+        //                             chunk_pos(x,y,z), *total_faces*4, face_dir, txtr_mapping, fluid
+        //                         );
+        //                         total_verts.append(&mut verts);
+        //                         total_inds.append(&mut inds);
+        //                         *total_faces += 1;
+        //                     }
+        //                 }
+        //             };
+        //
+        //             if let
+        //                 BlockCullType::BorderVisible0(block) |
+        //                 BlockCullType::BorderVisibleFluid0(block) |
+        //                 BlockCullType::AlwaysVisible(block)
+        //                 = &voxels[self.access(x,y,z)]
+        //             {
+        //                 let block = self.block_ind[block.0 as usize];
+        //
+        //                 let txtr = block.texture_id;
+        //
+        //                 let (verts, inds, faces) = match block.transparency {
+        //                     TransparencyType::Opaque => {(&mut opaque_verts, &mut opaque_inds, &mut opaque_faces)}
+        //                     TransparencyType::Transparent => {(&mut transparent_verts, &mut transparent_inds, &mut transparent_faces)}
+        //                     TransparencyType::Translucent => {(&mut translucent_verts, &mut translucent_inds, &mut translucent_faces)}
+        //                 };
+        //
+        //                 match block.mesh {
+        //                     MeshType::Cube => {
+        //                         local_checked_gen_face(verts, inds, faces, 0, 0, 1, FaceDir::FRONT, txtr, false, false);
+        //                         local_checked_gen_face(verts, inds, faces, 1, 0, 0, FaceDir::RIGHT, txtr, false, false);
+        //                         local_checked_gen_face(verts, inds, faces, 0, 0, -1, FaceDir::BACK, txtr, false, false);
+        //                         local_checked_gen_face(verts, inds, faces, -1, 0, 0, FaceDir::LEFT, txtr, false, false);
+        //                         local_checked_gen_face(verts, inds, faces, 0, 1, 0, FaceDir::TOP, txtr, false, false);
+        //                         local_checked_gen_face(verts, inds, faces, 0, -1, 0, FaceDir::BOTTOM, txtr, false, false);
+        //                     }
+        //                     MeshType::XCross => {
+        //                         let (mut xcross_verts, mut xcross_inds) = self.gen_xcross(
+        //                             chunk_pos(x,y,z), *faces*4, txtr,
+        //                         );
+        //                         verts.append(&mut xcross_verts);
+        //                         inds.append(&mut xcross_inds);
+        //                         *faces += 2;
+        //                     }
+        //                     MeshType::Fluid => {
+        //                         local_checked_gen_face(verts, inds, faces, 0, 0, 1, FaceDir::FRONT, txtr, true, true);
+        //                         local_checked_gen_face(verts, inds, faces, 1, 0, 0, FaceDir::RIGHT, txtr, true, true);
+        //                         local_checked_gen_face(verts, inds, faces, 0, 0, -1, FaceDir::BACK, txtr, true, true);
+        //                         local_checked_gen_face(verts, inds, faces, -1, 0, 0, FaceDir::LEFT, txtr, true, true);
+        //                         local_checked_gen_face(verts, inds, faces, 0, 1, 0, FaceDir::TOP, txtr, true, true);
+        //                         local_checked_gen_face(verts, inds, faces, 0, -1, 0, FaceDir::BOTTOM, txtr, true, true);
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+        //
+        // vec![
+        //     (opaque_verts, opaque_inds, None, RenderDataPurpose::TerrainOpaque),
+        //     (transparent_verts, transparent_inds, None, RenderDataPurpose::TerrainTransparent),
+        //     (translucent_verts, translucent_inds, None, RenderDataPurpose::TerrainTranslucent),
+        // ]
 
+        let ofs = (pos.x.get::<blox>().ceil() as i32, pos.y.get::<blox>().ceil() as i32, pos.z.get::<blox>().ceil() as i32);
         let chunk_pos = |x: u32, y: u32, z: u32| (
             pos.x.get::<blox>()+x as f32,
             pos.y.get::<blox>()+y as f32,
             -pos.z.get::<blox>()-z as f32
         );
 
-        for x in 0..self.chunk_size {
-            for y in 0..self.chunk_size {
-                for z in 0..self.chunk_size {
-                    let mut local_checked_gen_face = |
-                        total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
-                        dx, dy, dz, face_dir, txtr_mapping, fluid: bool, border_always_clear: bool| {
-                        if self.check_coord_within_chunk(x as i32+dx,y as i32+dy,z as i32+dz) {
-                            // inner face mesh culling
-                            let block_cull = voxels[self.access((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32)];
-                            if (!fluid && !Self::check_block_obscured(block_cull)) || (fluid && !Self::check_fluid_obscured(block_cull)) {
-                                // if delta face coord is in chunk and not obscured
-                                let (mut verts, mut inds) = self.gen_face(
-                                    chunk_pos(x,y,z), *total_faces*4, face_dir, txtr_mapping, fluid
-                                );
-                                total_verts.append(&mut verts);
-                                total_inds.append(&mut inds);
-                                *total_faces += 1;
-                            }
-                        }
-                    };
+        let opaque_cube_mesh = self.voluminous_opaque_cubes_mesh(ofs, chunk_pos);
+        let transparent_floral_mesh = self.sparse_transparent_floral_mesh(ofs, chunk_pos);
+        let translucent_fluid_mesh = self.temporary_fluid_mesher(ofs, chunk_pos);
 
-                    if let
-                        BlockCullType::BorderVisible0(block) |
-                        BlockCullType::BorderVisibleFluid0(block) |
-                        BlockCullType::AlwaysVisible(block)
-                        = &voxels[self.access(x,y,z)]
-                    {
-                        let block = self.block_ind[block.0 as usize];
+        let mut all_mesh = Vec::new();
 
-                        let txtr = block.texture_id;
-
-                        let (verts, inds, faces) = match block.transparency {
-                            TransparencyType::Opaque => {(&mut opaque_verts, &mut opaque_inds, &mut opaque_faces)}
-                            TransparencyType::Transparent => {(&mut transparent_verts, &mut transparent_inds, &mut transparent_faces)}
-                            TransparencyType::Translucent => {(&mut translucent_verts, &mut translucent_inds, &mut translucent_faces)}
-                        };
-
-                        match block.mesh {
-                            MeshType::Cube => {
-                                local_checked_gen_face(verts, inds, faces, 0, 0, 1, FaceDir::FRONT, txtr, false, false);
-                                local_checked_gen_face(verts, inds, faces, 1, 0, 0, FaceDir::RIGHT, txtr, false, false);
-                                local_checked_gen_face(verts, inds, faces, 0, 0, -1, FaceDir::BACK, txtr, false, false);
-                                local_checked_gen_face(verts, inds, faces, -1, 0, 0, FaceDir::LEFT, txtr, false, false);
-                                local_checked_gen_face(verts, inds, faces, 0, 1, 0, FaceDir::TOP, txtr, false, false);
-                                local_checked_gen_face(verts, inds, faces, 0, -1, 0, FaceDir::BOTTOM, txtr, false, false);
-                            }
-                            MeshType::XCross => {
-                                let (mut xcross_verts, mut xcross_inds) = self.gen_xcross(
-                                    chunk_pos(x,y,z), *faces*4, txtr,
-                                );
-                                verts.append(&mut xcross_verts);
-                                inds.append(&mut xcross_inds);
-                                *faces += 2;
-                            }
-                            MeshType::Fluid => {
-                                local_checked_gen_face(verts, inds, faces, 0, 0, 1, FaceDir::FRONT, txtr, true, true);
-                                local_checked_gen_face(verts, inds, faces, 1, 0, 0, FaceDir::RIGHT, txtr, true, true);
-                                local_checked_gen_face(verts, inds, faces, 0, 0, -1, FaceDir::BACK, txtr, true, true);
-                                local_checked_gen_face(verts, inds, faces, -1, 0, 0, FaceDir::LEFT, txtr, true, true);
-                                local_checked_gen_face(verts, inds, faces, 0, 1, 0, FaceDir::TOP, txtr, true, true);
-                                local_checked_gen_face(verts, inds, faces, 0, -1, 0, FaceDir::BOTTOM, txtr, true, true);
-                            }
-                        }
-                    }
-                }
-            }
+        for (v, i, f) in opaque_cube_mesh {
+            all_mesh.push((v, i, Some(f), RenderDataPurpose::TerrainOpaque))
         }
+        all_mesh.push((transparent_floral_mesh.0, transparent_floral_mesh.1, None, RenderDataPurpose::TerrainTransparent));
+        all_mesh.push((translucent_fluid_mesh.0, translucent_fluid_mesh.1, None, RenderDataPurpose::TerrainTranslucent));
 
-        vec![
-            (opaque_verts, opaque_inds, None, RenderDataPurpose::TerrainOpaque),
-            (transparent_verts, transparent_inds, None, RenderDataPurpose::TerrainTransparent),
-            (translucent_verts, translucent_inds, None, RenderDataPurpose::TerrainTranslucent),
-        ]
+        all_mesh
     }
 
     fn aggregate_mesh(&self,
                       _central_pos: Length3D,
-                      chunks: &HashMap<Position<Self::B>, Chunk<Self::P, Self::V, Self::I, Self::B>>
+                      chunks: &HashMap<Position<Self::B>, Chunk<Self::V, Self::I, Self::B>>
     ) -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>
     {
         println!("GEN AGGREGATED MESH");
@@ -261,109 +278,109 @@ impl ChunkGeneratable for ChunkGeneratorEF<'_> {
                 }
             }
 
-            let chunk_pos = |x: u32, y: u32, z: u32| (
-                chunk.pos.x.get::<blox>()+x as f32,
-                chunk.pos.y.get::<blox>()+y as f32,
-                -chunk.pos.z.get::<blox>()-z as f32
-            );
-
-            let cull_border_face = |x, y, z, face_dir: FaceDir| {
-                match face_dir {
-                    FaceDir::FRONT => {
-                        if let Some(ref hpos) = chunk.adjacency.front {
-                            let adj_block = chunks.get(hpos).unwrap().voxels[self.access(x,y,0)];
-                            Self::check_block_obscured(adj_block)
-                        } else { true }
-                        // if theres no chunk, then it probably means the player can't see it anyways
-                        // no need to render the whole face at the border
-                    }
-                    FaceDir::RIGHT => {
-                        if let Some(ref hpos) = chunk.adjacency.right {
-                            let adj_block = chunks.get(hpos).unwrap().voxels[self.access(0,y,z)];
-                            Self::check_block_obscured(adj_block)
-                        } else { true }
-                    }
-                    FaceDir::BACK => {
-                        if let Some(ref hpos) = chunk.adjacency.back {
-                            let adj_block = chunks.get(hpos).unwrap().voxels[self.access(x,y,self.chunk_size-1)];
-                            Self::check_block_obscured(adj_block)
-                        } else { true }
-                    }
-                    FaceDir::LEFT => {
-                        if let Some(ref hpos) = chunk.adjacency.left {
-                            let adj_block = chunks.get(hpos).unwrap().voxels[self.access(self.chunk_size-1,y,z)];
-                            Self::check_block_obscured(adj_block)
-                        } else { true }
-                    }
-                    FaceDir::TOP => {
-                        if let Some(ref hpos) = chunk.adjacency.top {
-                            let adj_block = chunks.get(hpos).unwrap().voxels[self.access(x,0,z)];
-                            Self::check_block_obscured(adj_block)
-                        } else { true }
-                    }
-                    FaceDir::BOTTOM => {
-                        if let Some(ref hpos) = chunk.adjacency.bottom {
-                            let adj_block = chunks.get(hpos).unwrap().voxels[self.access(x,self.chunk_size-1,z)];
-                            Self::check_block_obscured(adj_block)
-                        } else { true }
-                    }
-                }
-            };
-
-            for x in 0..self.chunk_size {
-                for y in 0..self.chunk_size {
-                    for z in 0..self.chunk_size {
-                        let mut local_checked_gen_face = |
-                            total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
-                            dx, dy, dz, face_dir, txtr_mapping, fluid: bool, border_always_clear: bool| {
-                            if !self.check_coord_within_chunk(x as i32+dx,y as i32+dy,z as i32+dz) {
-                                // chunk border mesh culling (more like checking whether any exposed border faces that needs to be shown/added)
-                                if !cull_border_face(x, y, z, face_dir) && !border_always_clear {
-                                    let (mut verts, mut inds) = self.gen_face(
-                                        chunk_pos(x,y,z), *total_faces*4, face_dir, txtr_mapping, fluid
-                                    );
-                                    total_verts.append(&mut verts);
-                                    total_inds.append(&mut inds);
-                                    *total_faces += 1;
-                                }
-                            }
-                        };
-
-                        if let BlockCullType::BorderVisible0(block) | BlockCullType::BorderVisibleFluid0(block) | BlockCullType::AlwaysVisible(block)
-                            = &chunk.voxels[self.access(x,y,z)] {
-                            let block = self.block_ind[block.0 as usize];
-
-                            let txtr = block.texture_id;
-
-                            let (verts, inds, faces) = match block.transparency {
-                                TransparencyType::Opaque => {(&mut opaque_verts, &mut opaque_inds, &mut opaque_faces)}
-                                TransparencyType::Transparent => {(&mut transparent_verts, &mut transparent_inds, &mut transparent_faces)}
-                                TransparencyType::Translucent => {(&mut translucent_verts, &mut translucent_inds, &mut translucent_faces)}
-                            };
-
-                            match block.mesh {
-                                MeshType::Cube => {
-                                    local_checked_gen_face(verts, inds, faces, 0, 0, 1, FaceDir::FRONT, txtr, false, false);
-                                    local_checked_gen_face(verts, inds, faces, 1, 0, 0, FaceDir::RIGHT, txtr, false, false);
-                                    local_checked_gen_face(verts, inds, faces, 0, 0, -1, FaceDir::BACK, txtr, false, false);
-                                    local_checked_gen_face(verts, inds, faces, -1, 0, 0, FaceDir::LEFT, txtr, false, false);
-                                    local_checked_gen_face(verts, inds, faces, 0, 1, 0, FaceDir::TOP, txtr, false, false);
-                                    local_checked_gen_face(verts, inds, faces, 0, -1, 0, FaceDir::BOTTOM, txtr, false, false);
-                                }
-                                MeshType::Fluid => {
-                                    local_checked_gen_face(verts, inds, faces, 0, 0, 1, FaceDir::FRONT, txtr, true, true);
-                                    local_checked_gen_face(verts, inds, faces, 1, 0, 0, FaceDir::RIGHT, txtr, true, true);
-                                    local_checked_gen_face(verts, inds, faces, 0, 0, -1, FaceDir::BACK, txtr, true, true);
-                                    local_checked_gen_face(verts, inds, faces, -1, 0, 0, FaceDir::LEFT, txtr, true, true);
-                                    local_checked_gen_face(verts, inds, faces, 0, 1, 0, FaceDir::TOP, txtr, true, true);
-                                    local_checked_gen_face(verts, inds, faces, 0, -1, 0, FaceDir::BOTTOM, txtr, true, true);
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-            }
+            // let chunk_pos = |x: u32, y: u32, z: u32| (
+            //     chunk.pos.x.get::<blox>()+x as f32,
+            //     chunk.pos.y.get::<blox>()+y as f32,
+            //     -chunk.pos.z.get::<blox>()-z as f32
+            // );
+            //
+            // let cull_border_face = |x, y, z, face_dir: FaceDir| {
+            //     match face_dir {
+            //         FaceDir::FRONT => {
+            //             if let Some(ref hpos) = chunk.adjacency.front {
+            //                 let adj_block = chunks.get(hpos).unwrap().voxels[self.access(x,y,0)];
+            //                 Self::check_block_obscured(adj_block)
+            //             } else { true }
+            //             // if theres no chunk, then it probably means the player can't see it anyways
+            //             // no need to render the whole face at the border
+            //         }
+            //         FaceDir::RIGHT => {
+            //             if let Some(ref hpos) = chunk.adjacency.right {
+            //                 let adj_block = chunks.get(hpos).unwrap().voxels[self.access(0,y,z)];
+            //                 Self::check_block_obscured(adj_block)
+            //             } else { true }
+            //         }
+            //         FaceDir::BACK => {
+            //             if let Some(ref hpos) = chunk.adjacency.back {
+            //                 let adj_block = chunks.get(hpos).unwrap().voxels[self.access(x,y,self.chunk_size-1)];
+            //                 Self::check_block_obscured(adj_block)
+            //             } else { true }
+            //         }
+            //         FaceDir::LEFT => {
+            //             if let Some(ref hpos) = chunk.adjacency.left {
+            //                 let adj_block = chunks.get(hpos).unwrap().voxels[self.access(self.chunk_size-1,y,z)];
+            //                 Self::check_block_obscured(adj_block)
+            //             } else { true }
+            //         }
+            //         FaceDir::TOP => {
+            //             if let Some(ref hpos) = chunk.adjacency.top {
+            //                 let adj_block = chunks.get(hpos).unwrap().voxels[self.access(x,0,z)];
+            //                 Self::check_block_obscured(adj_block)
+            //             } else { true }
+            //         }
+            //         FaceDir::BOTTOM => {
+            //             if let Some(ref hpos) = chunk.adjacency.bottom {
+            //                 let adj_block = chunks.get(hpos).unwrap().voxels[self.access(x,self.chunk_size-1,z)];
+            //                 Self::check_block_obscured(adj_block)
+            //             } else { true }
+            //         }
+            //     }
+            // };
+            //
+            // for x in 0..self.chunk_size {
+            //     for y in 0..self.chunk_size {
+            //         for z in 0..self.chunk_size {
+            //             let mut local_checked_gen_face = |
+            //                 total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
+            //                 dx, dy, dz, face_dir, txtr_mapping, fluid: bool, border_always_clear: bool| {
+            //                 if !self.check_coord_within_chunk(x as i32+dx,y as i32+dy,z as i32+dz) {
+            //                     // chunk border mesh culling (more like checking whether any exposed border faces that needs to be shown/added)
+            //                     if !cull_border_face(x, y, z, face_dir) && !border_always_clear {
+            //                         let (mut verts, mut inds) = self.gen_face(
+            //                             chunk_pos(x,y,z), *total_faces*4, face_dir, txtr_mapping, fluid
+            //                         );
+            //                         total_verts.append(&mut verts);
+            //                         total_inds.append(&mut inds);
+            //                         *total_faces += 1;
+            //                     }
+            //                 }
+            //             };
+            //
+            //             if let BlockCullType::BorderVisible0(block) | BlockCullType::BorderVisibleFluid0(block) | BlockCullType::AlwaysVisible(block)
+            //                 = &chunk.voxels[self.access(x,y,z)] {
+            //                 let block = self.block_ind[block.0 as usize];
+            //
+            //                 let txtr = block.texture_id;
+            //
+            //                 let (verts, inds, faces) = match block.transparency {
+            //                     TransparencyType::Opaque => {(&mut opaque_verts, &mut opaque_inds, &mut opaque_faces)}
+            //                     TransparencyType::Transparent => {(&mut transparent_verts, &mut transparent_inds, &mut transparent_faces)}
+            //                     TransparencyType::Translucent => {(&mut translucent_verts, &mut translucent_inds, &mut translucent_faces)}
+            //                 };
+            //
+            //                 match block.mesh {
+            //                     MeshType::Cube => {
+            //                         local_checked_gen_face(verts, inds, faces, 0, 0, 1, FaceDir::FRONT, txtr, false, false);
+            //                         local_checked_gen_face(verts, inds, faces, 1, 0, 0, FaceDir::RIGHT, txtr, false, false);
+            //                         local_checked_gen_face(verts, inds, faces, 0, 0, -1, FaceDir::BACK, txtr, false, false);
+            //                         local_checked_gen_face(verts, inds, faces, -1, 0, 0, FaceDir::LEFT, txtr, false, false);
+            //                         local_checked_gen_face(verts, inds, faces, 0, 1, 0, FaceDir::TOP, txtr, false, false);
+            //                         local_checked_gen_face(verts, inds, faces, 0, -1, 0, FaceDir::BOTTOM, txtr, false, false);
+            //                     }
+            //                     MeshType::Fluid => {
+            //                         local_checked_gen_face(verts, inds, faces, 0, 0, 1, FaceDir::FRONT, txtr, true, true);
+            //                         local_checked_gen_face(verts, inds, faces, 1, 0, 0, FaceDir::RIGHT, txtr, true, true);
+            //                         local_checked_gen_face(verts, inds, faces, 0, 0, -1, FaceDir::BACK, txtr, true, true);
+            //                         local_checked_gen_face(verts, inds, faces, -1, 0, 0, FaceDir::LEFT, txtr, true, true);
+            //                         local_checked_gen_face(verts, inds, faces, 0, 1, 0, FaceDir::TOP, txtr, true, true);
+            //                         local_checked_gen_face(verts, inds, faces, 0, -1, 0, FaceDir::BOTTOM, txtr, true, true);
+            //                     }
+            //                     _ => {}
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
         }
 
         vec![

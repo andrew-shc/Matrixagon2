@@ -4,7 +4,7 @@ use ash::{Device, vk};
 use crate::component::{RenderData, RenderDataPurpose};
 use crate::framebuffer::FBAttachmentRef;
 use crate::{get_vertex_inp};
-use crate::shader::{DescriptorManager, destroy_shader_modules, gen_shader_modules_info, Shader, standard_graphics_pipeline, StandardGraphicsPipelineInfo, transparent_cba};
+use crate::shader::{DescriptorManager, destroy_shader_modules, disabled_cba, gen_shader_modules_info, Shader, standard_graphics_pipeline, StandardGraphicsPipelineInfo, transparent_cba};
 use crate::shader::debug_ui::DebugUISubShader;
 
 #[derive(Copy, Clone, Debug)]
@@ -185,7 +185,7 @@ impl ChunkRasterizer {
                 StandardGraphicsPipelineInfo {
                     shader_stages, vertex_input_state,
                     back_face_culling: true, depth_testing: true,
-                    color_blend_attachment_state: vec![transparent_cba()],
+                    color_blend_attachment_state: vec![disabled_cba()],
                     subpass_index: 0,
                 },
                 StandardGraphicsPipelineInfo {

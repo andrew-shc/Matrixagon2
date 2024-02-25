@@ -118,6 +118,8 @@ pub(crate) unsafe fn standard_graphics_pipeline(
 
         if info.back_face_culling {
             rasterizer_info.cull_mode = vk::CullModeFlags::BACK;
+        } else {
+            rasterizer_info.cull_mode = vk::CullModeFlags::NONE;
         }
 
         let pipeline_create_info = vk::GraphicsPipelineCreateInfo {

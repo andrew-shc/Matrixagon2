@@ -7,8 +7,6 @@ mod terrain_gen;
 use std::rc::Rc;
 use ash::{Device, vk};
 use noise::NoiseFn;
-use uom::si::f32::Length;
-use winit::event::VirtualKeyCode;
 use crate::chunk_mesh::{ChunkGeneratable, ChunkMesh, ChunkRadius, UpdateChunk};
 use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::component::camera::Length3D;
@@ -17,7 +15,6 @@ use crate::component::terrain::chunk_gen_hf::ChunkGeneratorHF;
 use crate::component::terrain::chunk_gen_mf::ChunkGeneratorMF;
 use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::handler::VulkanInstance;
-use crate::measurement::{blox, chux, chux_hf, chux_mf};
 use crate::shader::chunk::ChunkVertex;
 use crate::util::{CmdBufContext, create_host_buffer, create_local_buffer};
 use crate::world::WorldEvent;
@@ -35,6 +32,7 @@ pub(crate) enum FaceDir {
 
 #[derive(Copy, Clone, Debug)]
 pub enum MeshType {
+    Empty,
     Cube,
     XCross,
     Fluid
@@ -257,7 +255,6 @@ impl Component for Terrain<'static> {
 
         let mut data_aggregator = |rd: Vec<(Vec<ChunkVertex>, Vec<u32>, RenderDataPurpose)>| {
             for (mut verts, inds, purpose) in rd {
-                // TODO: aggregate all vertex & index (w/ proper ofs computed here) to a parent vector (verts, inds, purpose)
                 let mut appended = false;
                 for (v, i, p) in render_data.iter_mut() {
                     if *p == purpose {
