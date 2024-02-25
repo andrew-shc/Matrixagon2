@@ -17,30 +17,39 @@ pub(super) trait ChunkMeshUtil {
     }
 
     fn check_block_obscured(block: BlockCullType) -> bool {
-        mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisible(Block::default())) ||
+        mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisible0(Block::default())) ||
             mem::discriminant(&block) == mem::discriminant(&BlockCullType::Obscured)
     }
 
     fn check_fluid_obscured(block: BlockCullType) -> bool {
-        mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisibleFluid(Block::default())) ||
+        mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisibleFluid0(Block::default())) ||
             mem::discriminant(&block) == mem::discriminant(&BlockCullType::ObscuredFluid) ||
-            mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisible(Block::default())) ||
+            mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisible0(Block::default())) ||
             mem::discriminant(&block) == mem::discriminant(&BlockCullType::Obscured)
     }
 
-    fn reverse_access(&self, pos: Length3D, i: f32) -> (f64, f64, f64) {
-        let y = (i/(self.chunk_size() as f32*self.chunk_size() as f32)).floor();
-        let x = ((i-y*self.chunk_size() as f32*self.chunk_size() as f32)/self.chunk_size() as f32).floor();
-        let z = (i-y*self.chunk_size() as f32*self.chunk_size() as f32) % self.chunk_size() as f32;
-        (x as f64+pos.x.get::<blox>() as f64, y as f64+pos.y.get::<blox>() as f64, z as f64+pos.z.get::<blox>() as f64)
-    }
+    // fn reverse_access(&self, inverse: bool, pos: Length3D, i: f32) -> Option<(f64, f64, f64)> {
+    //     let y = (i/(self.chunk_size() as f32*self.chunk_size() as f32)).floor();
+    //     let x = ((i-y*self.chunk_size() as f32*self.chunk_size() as f32)/self.chunk_size() as f32).floor();
+    //     let z = (i-y*self.chunk_size() as f32*self.chunk_size() as f32) % self.chunk_size() as f32;
+    //     let mut ofs = if inverse {1} else {0};
+    //     ofs += y%2.0;
+    //     ofs += z%2.0;
+    //     if (x+y+z+ofs)%2 == 0 {
+    //         Some(
+    //             (x as f64+pos.x.get::<blox>() as f64, y as f64+pos.y.get::<blox>() as f64, z as f64+pos.z.get::<blox>() as f64)
+    //         )
+    //     } else {
+    //         None
+    //     }
+    // }
 
     fn block_culling(&self, voxel: &mut Box<[BlockCullType]>) {
-        for x in 1..self.chunk_size() -1 {
-            for y in 1..self.chunk_size() -1 {
-                for z in 1..self.chunk_size() -1 {
+        for x in 1..self.chunk_size()-1 {
+            for y in 1..self.chunk_size()-1 {
+                for z in 1..self.chunk_size()-1 {
                     match voxel[self.access(x,y,z)] {
-                        BlockCullType::BorderVisible(_) if
+                        BlockCullType::BorderVisible0(_) if
                         Self::check_block_obscured(voxel[self.access(x+1,y,z)]) &&
                             Self::check_block_obscured(voxel[self.access(x-1,y,z)]) &&
                             Self::check_block_obscured(voxel[self.access(x,y+1,z)]) &&
@@ -49,7 +58,7 @@ pub(super) trait ChunkMeshUtil {
                             Self::check_block_obscured(voxel[self.access(x,y,z-1)]) => {
                             voxel[self.access(x,y,z)] = BlockCullType::Obscured;
                         }
-                        BlockCullType::BorderVisibleFluid(_) if
+                        BlockCullType::BorderVisibleFluid0(_) if
                         Self::check_fluid_obscured(voxel[self.access(x+1,y,z)]) &&
                             Self::check_fluid_obscured(voxel[self.access(x-1,y,z)]) &&
                             Self::check_fluid_obscured(voxel[self.access(x,y+1,z)]) &&

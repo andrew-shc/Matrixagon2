@@ -13,6 +13,7 @@ use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::component::camera::Length3D;
 use crate::component::terrain::chunk_gen::ChunkGeneratorEF;
 use crate::component::terrain::chunk_gen_hf::ChunkGeneratorHF;
+use crate::component::terrain::chunk_gen_mf::ChunkGeneratorMF;
 use crate::handler::VulkanInstance;
 use crate::measurement::{blox, chux, chux_hf, chux_mf};
 use crate::shader::chunk::ChunkVertex;
@@ -48,10 +49,32 @@ pub enum TransparencyType {
 pub enum BlockCullType {
     Empty,
     AlwaysVisible(Block),  // always visible (not culled) regardless of any adjacent condition
-    BorderVisible(Block),  // visible only if any of its adjacent side is Empty|AlwaysVisible|BorderVisibleFluid|ObscuredFluid
-    BorderVisibleFluid(Block),  // visible only if any of its adjacent side is Empty|AlwaysVisible
+    BorderVisible0(Block),  // visible only if any of its adjacent side is Empty|AlwaysVisible|BorderVisibleFluid|ObscuredFluid
+    BorderVisible1(Block),  // a block is adjacent
+    BorderVisible2(Block),  // two blocks are adjacent
+    BorderVisible3(Block),  // three blocks are adjacent
+    BorderVisibleFluid0(Block),  // visible only if any of its adjacent side is Empty|AlwaysVisible
+    BorderVisibleFluid1(Block),
+    BorderVisibleFluid2(Block),
+    BorderVisibleFluid3(Block),
     Obscured,  // when BorderVisible is surrounded by other BorderVisible|Obscured
     ObscuredFluid,  // when BorderVisibleFluid is surrounded by other BorderVisible|BorderVisibleFluid|Obscured|ObscuredFluid
+}
+
+impl BlockCullType {
+    pub fn decrease_visibility(self) -> Self {
+        match self {
+            BlockCullType::BorderVisible0(b) => {BlockCullType::BorderVisible1(b)}
+            BlockCullType::BorderVisible1(b) => {BlockCullType::BorderVisible2(b)}
+            BlockCullType::BorderVisible2(b) => {BlockCullType::BorderVisible3(b)}
+            BlockCullType::BorderVisible3(_) => {BlockCullType::Obscured}
+            BlockCullType::BorderVisibleFluid0(f) => {BlockCullType::BorderVisibleFluid1(f)}
+            BlockCullType::BorderVisibleFluid1(f) => {BlockCullType::BorderVisibleFluid2(f)}
+            BlockCullType::BorderVisibleFluid2(f) => {BlockCullType::BorderVisibleFluid3(f)}
+            BlockCullType::BorderVisibleFluid3(_) => {BlockCullType::ObscuredFluid}
+            _ => {self}
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -137,7 +160,7 @@ pub(crate) struct Terrain<'b> {
 
     chunk_mesh_ef: Option<ChunkMesh<ChunkGeneratorEF<'b>>>,
     chunk_mesh_hf: Option<ChunkMesh<ChunkGeneratorHF<'b>>>,
-    chunk_mesh_mf: Option<ChunkMesh<ChunkGeneratorHF<'b>>>,
+    chunk_mesh_mf: Option<ChunkMesh<ChunkGeneratorMF<'b>>>,
     to_render: Vec<RenderData>,
     chunk_update_ef: bool,
     chunk_update_hf: bool,
@@ -176,6 +199,10 @@ impl Component for Terrain<'static> {
                     let need_update = chunk_mesh.update(UpdateChunk::NewPos(pos));
                     self.chunk_update_hf = self.chunk_update_hf || need_update;
                 }
+                if let Some(ref mut chunk_mesh) = self.chunk_mesh_mf {
+                    let need_update = chunk_mesh.update(UpdateChunk::NewPos(pos));
+                    self.chunk_update_mf = self.chunk_update_mf || need_update;
+                }
             }
             WorldEvent::NewTextureMapper(txtr_mapper) => {
                 let mut chunk_mesh_ef = ChunkMesh::new(
@@ -185,19 +212,28 @@ impl Component for Terrain<'static> {
                         self.block_ind.clone(), txtr_mapper.clone()
                     ),
                 );
-                let mut chunk_mesh_hf = ChunkMesh::new(
+                chunk_mesh_ef.update(UpdateChunk::Forced);
+                self.chunk_mesh_ef.replace(chunk_mesh_ef);
+
+                // let mut chunk_mesh_hf = ChunkMesh::new(
+                //     Length3D::origin(),
+                //     ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
+                //     ChunkGeneratorHF::new(
+                //         self.block_ind.clone(), txtr_mapper.clone()
+                //     ),
+                // );
+                // chunk_mesh_hf.update(UpdateChunk::Forced);
+                // self.chunk_mesh_hf.replace(chunk_mesh_hf);
+
+                let mut chunk_mesh_mf = ChunkMesh::new(
                     Length3D::origin(),
-                    ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
-                    ChunkGeneratorHF::new(
+                    ChunkRadius(2, 1), Some(ChunkRadius(2, 1)),
+                    ChunkGeneratorMF::new(
                         self.block_ind.clone(), txtr_mapper.clone()
                     ),
                 );
-
-                chunk_mesh_ef.update(UpdateChunk::Forced);
-                chunk_mesh_hf.update(UpdateChunk::Forced);
-
-                self.chunk_mesh_ef.replace(chunk_mesh_ef);
-                self.chunk_mesh_hf.replace(chunk_mesh_hf);
+                chunk_mesh_mf.update(UpdateChunk::Forced);
+                self.chunk_mesh_mf.replace(chunk_mesh_mf);
             }
             WorldEvent::SpectatorMode(enabled) => {
                 self.spectator_mode = enabled;
@@ -244,9 +280,16 @@ impl Component for Terrain<'static> {
         }
         if self.chunk_update_hf {
             if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh_hf {
-                println!("CHUNK UPDATE HF");
                 data_aggregator(chunk_mesh.generate_vertices());
                 self.chunk_update_hf = false;
+                any_chunk_update = true;
+            }
+        }
+        if self.chunk_update_mf {
+            if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh_mf {
+                println!("CHUNK UPDATE MF");
+                data_aggregator(chunk_mesh.generate_vertices());
+                self.chunk_update_mf = false;
                 any_chunk_update = true;
             }
         }

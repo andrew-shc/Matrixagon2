@@ -59,13 +59,13 @@ impl ChunkGeneratable for ChunkGeneratorHF<'_> {
 
                         if y > base_level+1.0 {
                             if y <= Self::SEA_LEVEL {
-                                BlockCullType::BorderVisibleFluid(Block(6))
+                                BlockCullType::BorderVisibleFluid0(Block(6))
                             } else {
                                 BlockCullType::Empty
                             }
                         } else if y > base_level {
                             if y <= Self::SEA_LEVEL {
-                                BlockCullType::BorderVisibleFluid(Block(6))
+                                BlockCullType::BorderVisibleFluid0(Block(6))
                             } else if 0.8 < floralness && floralness < 0.9 {
                                 if 0.84 < floralness && floralness < 0.86 {
                                     BlockCullType::AlwaysVisible(Block(5))
@@ -76,13 +76,13 @@ impl ChunkGeneratable for ChunkGeneratorHF<'_> {
                                 BlockCullType::Empty
                             }
                         } else if y < Self::SAND_LEVEL {
-                            BlockCullType::BorderVisible(Block(3))
+                            BlockCullType::BorderVisible0(Block(3))
                         } else if y > base_level-1.0 {
-                            BlockCullType::BorderVisible(Block(0))
+                            BlockCullType::BorderVisible0(Block(2))  // TODO: LOD DEBUG
                         } else if y > base_level-3.0 {
-                            BlockCullType::BorderVisible(Block(1))
+                            BlockCullType::BorderVisible0(Block(1))
                         } else {
-                            BlockCullType::BorderVisible(Block(2))
+                            BlockCullType::BorderVisible0(Block(2))
                         }
 
                         // if y > 40 {
@@ -127,11 +127,6 @@ impl ChunkGeneratable for ChunkGeneratorHF<'_> {
                     let mut local_checked_gen_face = |
                         total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
                         dx, dy, dz, face_dir, txtr_mapping, fluid: bool, border_always_clear: bool| {
-                        // if (dx == -1 && x == 0) || (dy == -1 && y == 0) || (dz == 1 && z == self.chunk_size-1) ||
-                        //     ((dx == 1 && x == self.chunk_size-1) || (dy == 1 && y == self.chunk_size-1) || (dz == -1 && z == 0)) {
-                        //     // detects any face generation on chunk border face, they will be excluded when stored in chunk
-                        //     //  only to be shown as needed when aggregated with other chunks
-                        // } else
                         if self.check_coord_within_chunk(x as i32+dx,y as i32+dy,z as i32+dz) {
                             // inner face mesh culling
                             let block_cull = voxels[self.access((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32)];
@@ -148,8 +143,8 @@ impl ChunkGeneratable for ChunkGeneratorHF<'_> {
                     };
 
                     if let
-                        BlockCullType::BorderVisible(block) |
-                        BlockCullType::BorderVisibleFluid(block) |
+                        BlockCullType::BorderVisible0(block) |
+                        BlockCullType::BorderVisibleFluid0(block) |
                         BlockCullType::AlwaysVisible(block)
                         = &voxels[self.access(x,y,z)]
                     {
@@ -315,7 +310,7 @@ impl ChunkGeneratable for ChunkGeneratorHF<'_> {
                             }
                         };
 
-                        if let BlockCullType::BorderVisible(block) | BlockCullType::BorderVisibleFluid(block) | BlockCullType::AlwaysVisible(block)
+                        if let BlockCullType::BorderVisible0(block) | BlockCullType::BorderVisibleFluid0(block) | BlockCullType::AlwaysVisible(block)
                             = &chunk.voxels[self.access(x,y,z)] {
                             let block = self.block_ind[block.0 as usize];
 

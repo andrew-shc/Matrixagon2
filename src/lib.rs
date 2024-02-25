@@ -265,10 +265,10 @@ impl MatrixagonApp {
             }
             Event::MainEventsCleared => {
                 if app.mouse_lock {
-                    app.window.set_cursor_position(PhysicalPosition::new(
-                        app.handler.swapchain.as_ref().unwrap().extent.width as f32/2.0,
-                        app.handler.swapchain.as_ref().unwrap().extent.height as f32/2.0
-                    )).unwrap();
+                    let _ = app.window.set_cursor_position(PhysicalPosition::new(
+                        app.handler.swapchain.as_ref().unwrap().extent.width as f32 / 2.0,
+                        app.handler.swapchain.as_ref().unwrap().extent.height as f32 / 2.0
+                    ));
                 }
 
                 // update app state

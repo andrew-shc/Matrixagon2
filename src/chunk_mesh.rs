@@ -127,33 +127,6 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
         }
     }
 
-    // pub(crate) fn initialize(&mut self) {
-    //     for cx in -self.subchunk_outer_radius..self.subchunk_outer_radius {
-    //         for cy in -self.subchunk_outer_radius..self.subchunk_outer_radius {
-    //             for cz in -self.subchunk_outer_radius..self.subchunk_outer_radius {
-    //                 let chunk_pos = Length3D::new(
-    //                     Length::new::<G::B>(cx as f32)+self.central_pos.x,
-    //                     Length::new::<G::B>(cy as f32)+self.central_pos.y,
-    //                     Length::new::<G::B>(cz as f32)+self.central_pos.z,
-    //                 );
-    //
-    //                 println!("Initial chunk load [{cx} {cy} {cz} <{:?}>]", self.chunk_size);
-    //
-    //                 self.load_chunk(Length3D::new(
-    //                     Length::new::<G::B>(cx as f32)+self.central_pos.x.floor::<G::B>(),
-    //                     Length::new::<G::B>(cy as f32)+self.central_pos.y.floor::<G::B>(),
-    //                     Length::new::<G::B>(cz as f32)+self.central_pos.z.floor::<G::B>(),
-    //                 ));
-    //                 println!("Initial chunk loaded [{} {} {}]",
-    //                          chunk_pos.x.into_format_args(G::M, DisplayStyle::Abbreviation),
-    //                          chunk_pos.y.into_format_args(G::M, DisplayStyle::Abbreviation),
-    //                          chunk_pos.z.into_format_args(G::M, DisplayStyle::Abbreviation),
-    //                 );
-    //             }
-    //         }
-    //     }
-    // }
-
     pub(crate) fn swap_generator(&mut self, generator: G) {
         self.generator = generator;
     }
@@ -207,16 +180,16 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
                             } else {
                                 // chunk at new_chunk_pos does not exist (needs to be created)
 
-                                // if chunk_pos.x.get::<G::A>() % 1.0 == 0.0 &&
-                                //     chunk_pos.y.get::<G::A>() % 1.0 == 0.0 &&
-                                //     chunk_pos.z.get::<G::A>() % 1.0 == 0.0 {
-                                //     println!("New chunk loaded [{} {} {} <{}>]",
-                                //              chunk_pos.x.get::<G::A>(),
-                                //              chunk_pos.y.get::<G::A>(),
-                                //              chunk_pos.z.get::<G::A>(),
-                                //              G::A::abbreviation(),
-                                //     );
-                                // }
+                                if chunk_pos.x.get::<G::A>() % 1.0 == 0.0 &&
+                                    chunk_pos.y.get::<G::A>() % 2.0 == 0.0 &&
+                                    chunk_pos.z.get::<G::A>() % 2.0 == 0.0 {
+                                    println!("New chunk loaded [{} {} {} <{}>]",
+                                             chunk_pos.x.get::<G::A>(),
+                                             chunk_pos.y.get::<G::A>(),
+                                             chunk_pos.z.get::<G::A>(),
+                                             G::A::abbreviation(),
+                                    );
+                                }
 
                                 self.load_chunk(chunk_pos);
                                 chunk_changed = true;
@@ -343,16 +316,19 @@ pub(crate) struct Chunk<P, V, I, M: BlockLengthUnit> {
     pub(crate) hash_pos: Position<M>,
     pub(crate) adjacency: ChunkAdjacency<M>,
     pub(crate) mesh: Vec<(Vec<V>, Vec<I>, RenderDataPurpose)>,
-    obscured: bool,
     visible: bool,
 }
 
 impl<P, V, I, M: BlockLengthUnit> Chunk<P, V, I, M> {
     pub(crate) fn new(
-        pos: Length3D, hash_pos: Position<M>, voxels: Box<[P]>, init_adjs: ChunkAdjacency<M>, mesh: Vec<(Vec<V>, Vec<I>, RenderDataPurpose)>
+        pos: Length3D,
+        hash_pos: Position<M>,
+        voxels: Box<[P]>,
+        init_adjs: ChunkAdjacency<M>,
+        mesh: Vec<(Vec<V>, Vec<I>, RenderDataPurpose)>,
     ) -> Self {
         Self {
-            voxels, pos, hash_pos, adjacency: init_adjs, mesh, obscured: false, visible: true,
+            voxels, pos, hash_pos, adjacency: init_adjs, mesh, visible: true,
         }
     }
 

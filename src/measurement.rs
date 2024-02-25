@@ -8,7 +8,7 @@ unit! {
     @blox: 1.0; "bx", "block", "blocks";
     @chux: 32.0; "cx", "chunk", "chunks"; // extreme fidelity (basic chunk level)
     @chux_hf: 128.0; "hf", "high fidelity chunk", "high fidelity chunks";
-    @chux_mf: 512.0; "mf", "medium fidelity chunk", "medium fidelity chunks";
+    @chux_mf: 512.0; "mf", "medium fidelity chunk", "medium fidelity chunks";  //512
     @chux_lf: 4096.0; "lf", "low fidelity chunk", "low fidelity chunks";
     @chux_minf: 16384.0; "minf", "minimal fidelity chunk", "minimal fidelity chunks";
     @chux_nonf: 65536.0; "nonf", "no fidelity chunk", "no fidelity chunks";  // extremely minimal fidelity chunk
