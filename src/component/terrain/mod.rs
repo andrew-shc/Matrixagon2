@@ -2,6 +2,7 @@ mod chunk_gen;
 mod chunk_gen_hf;
 mod chunk_gen_mf;
 mod mesh_util;
+mod terrain_gen;
 
 use std::rc::Rc;
 use ash::{Device, vk};
@@ -14,6 +15,7 @@ use crate::component::camera::Length3D;
 use crate::component::terrain::chunk_gen::ChunkGeneratorEF;
 use crate::component::terrain::chunk_gen_hf::ChunkGeneratorHF;
 use crate::component::terrain::chunk_gen_mf::ChunkGeneratorMF;
+use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::handler::VulkanInstance;
 use crate::measurement::{blox, chux, chux_hf, chux_mf};
 use crate::shader::chunk::ChunkVertex;
@@ -158,6 +160,8 @@ pub(crate) struct Terrain<'b> {
 
     block_ind: Vec<BlockData<'b>>,
 
+    terrain_gen: Rc<TerrainGenerator>,
+
     chunk_mesh_ef: Option<ChunkMesh<ChunkGeneratorEF<'b>>>,
     chunk_mesh_hf: Option<ChunkMesh<ChunkGeneratorHF<'b>>>,
     chunk_mesh_mf: Option<ChunkMesh<ChunkGeneratorMF<'b>>>,
@@ -174,6 +178,7 @@ impl<'b> Terrain<'b> {
         Self {
             vi, device, ctx: ctx.clone(),
             block_ind,
+            terrain_gen: Rc::new(TerrainGenerator::new()),
             chunk_mesh_ef: None, chunk_mesh_mf: None, chunk_mesh_hf: None,
             to_render: vec![],
             chunk_update_ef: true, chunk_update_hf: true, chunk_update_mf: true,
@@ -209,7 +214,7 @@ impl Component for Terrain<'static> {
                     Length3D::origin(),
                     ChunkRadius(4, 2), None,
                     ChunkGeneratorEF::new(
-                        self.block_ind.clone(), txtr_mapper.clone()
+                        self.block_ind.clone(), txtr_mapper.clone(), self.terrain_gen.clone()
                     ),
                 );
                 chunk_mesh_ef.update(UpdateChunk::Forced);
@@ -219,7 +224,7 @@ impl Component for Terrain<'static> {
                     Length3D::origin(),
                     ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
                     ChunkGeneratorHF::new(
-                        self.block_ind.clone(), txtr_mapper.clone()
+                        self.block_ind.clone(), txtr_mapper.clone(), self.terrain_gen.clone()
                     ),
                 );
                 chunk_mesh_hf.update(UpdateChunk::Forced);
@@ -229,7 +234,7 @@ impl Component for Terrain<'static> {
                     Length3D::origin(),
                     ChunkRadius(2, 1), Some(ChunkRadius(2, 1)),
                     ChunkGeneratorMF::new(
-                        self.block_ind.clone(), txtr_mapper.clone()
+                        self.block_ind.clone(), txtr_mapper.clone(), self.terrain_gen.clone()
                     ),
                 );
                 chunk_mesh_mf.update(UpdateChunk::Forced);

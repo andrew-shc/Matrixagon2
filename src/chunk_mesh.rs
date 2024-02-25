@@ -8,6 +8,7 @@ use uom::si::f32::Length;
 use uom::si::Unit;
 use crate::component::camera::{Length3D};
 use crate::component::RenderDataPurpose;
+use crate::component::terrain::FaceDir;
 use crate::measurement::chux_hf;
 
 
@@ -23,8 +24,8 @@ pub(crate) trait ChunkGeneratable {
     type I;
     fn generate_voxel(&self, pos: Length3D) -> Box<[Self::P]>;
     fn generate_mesh(&self, pos: Length3D, voxels: &[Self::P])
-        -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>;
-    fn aggregate_mesh(&self, chunks: &HashMap<Position<Self::B>, Chunk<Self::P, Self::V, Self::I, Self::B>>)
+        -> Vec<(Vec<Self::V>, Vec<Self::I>, Option<FaceDir>, RenderDataPurpose)>;
+    fn aggregate_mesh(&self, central_pos: Length3D, chunks: &HashMap<Position<Self::B>, Chunk<Self::P, Self::V, Self::I, Self::B>>)
         -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>;
 }
 
@@ -282,7 +283,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
 
     // generate the entire aggregated vertices/indices
     pub(crate) fn generate_vertices(&mut self) -> Vec<(Vec<G::V>, Vec<G::I>, RenderDataPurpose)> {
-        self.generator.aggregate_mesh(&self.chunks)
+        self.generator.aggregate_mesh(self.central_pos, &self.chunks)
     }
 
     // checks outward
@@ -315,7 +316,7 @@ pub(crate) struct Chunk<P, V, I, M: BlockLengthUnit> {
     pub(crate) pos: Length3D,  // south-west corner of the chunk TODO
     pub(crate) hash_pos: Position<M>,
     pub(crate) adjacency: ChunkAdjacency<M>,
-    pub(crate) mesh: Vec<(Vec<V>, Vec<I>, RenderDataPurpose)>,
+    pub(crate) mesh: Vec<(Vec<V>, Vec<I>, Option<FaceDir>, RenderDataPurpose)>,
     visible: bool,
 }
 
@@ -325,7 +326,7 @@ impl<P, V, I, M: BlockLengthUnit> Chunk<P, V, I, M> {
         hash_pos: Position<M>,
         voxels: Box<[P]>,
         init_adjs: ChunkAdjacency<M>,
-        mesh: Vec<(Vec<V>, Vec<I>, RenderDataPurpose)>,
+        mesh: Vec<(Vec<V>, Vec<I>, Option<FaceDir>, RenderDataPurpose)>,
     ) -> Self {
         Self {
             voxels, pos, hash_pos, adjacency: init_adjs, mesh, visible: true,

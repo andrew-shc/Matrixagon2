@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::mem;
+use std::rc::Rc;
 use noise::{NoiseFn, Perlin, Simplex};
 use uom::si::f32::Length;
 use crate::chunk_mesh::{Chunk, Position, ChunkGeneratable};
@@ -7,6 +8,7 @@ use crate::component::camera::Length3D;
 use crate::component::RenderDataPurpose;
 use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir, MeshType, TextureMapper, TransparencyType};
 use crate::component::terrain::mesh_util::{ChunkMeshUtil};
+use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::component::texture::TextureIDMapper;
 use crate::measurement::{blox, chux};
 use crate::shader::chunk::ChunkVertex;
@@ -15,26 +17,36 @@ pub(super) struct ChunkGeneratorEF<'b> {
     chunk_size: u32,
     block_ind: Vec<BlockData<'b>>,
     txtr_id_mapper: TextureIDMapper,
-    noise: Perlin,
-    floral_noise: Perlin,
+    // noise: Perlin,
+    // floral_noise: Perlin,
+    terrain_gen: Rc<TerrainGenerator>,
 }
 
 impl<'b> ChunkGeneratorEF<'b> {
     const SEA_LEVEL: f64 = 10.0;
     const SAND_LEVEL: f64 = 13.0;
 
-    pub(super) fn new(block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper,) -> Self {
+    pub(super) fn new(block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper, terrain_gen: Rc<TerrainGenerator>) -> Self {
         Self {
             chunk_size: Length::new::<<Self as ChunkGeneratable>::B>(1.0).get::<blox>() as u32, block_ind, txtr_id_mapper,
-            noise: Perlin::new(50), floral_noise: Perlin::new(23),
+            // noise: Perlin::new(50), floral_noise: Perlin::new(23),
+            terrain_gen,
         }
     }
 }
 
-impl ChunkMeshUtil for ChunkGeneratorEF<'_> {
+impl<'b> ChunkMeshUtil<'b> for ChunkGeneratorEF<'b> {
     fn chunk_size(&self) -> u32 {self.chunk_size}
 
     fn texture_id_mapper(&self) -> TextureIDMapper {self.txtr_id_mapper.clone()}
+
+    fn block_ind(&self, ind: usize) -> BlockData<'b> {
+        self.block_ind[ind]
+    }
+
+    fn terrain_gen(&self) -> Rc<TerrainGenerator> {
+        self.terrain_gen.clone()
+    }
 }
 
 impl ChunkGeneratable for ChunkGeneratorEF<'_> {
@@ -52,52 +64,53 @@ impl ChunkGeneratable for ChunkGeneratorEF<'_> {
         for y in pos.y..pos.y+self.chunk_size() as isize {
             for x in pos.x..pos.x+self.chunk_size() as isize {
                 for z in pos.z..pos.z+self.chunk_size() as isize {
-                    raw_voxels.push({
-                        // TERRAIN GENERATION (NO SIDE EFFECT)
-                        let (x,y,z) = (x as f64, y as f64, z as f64);
-
-                        let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
-                        let floralness = self.floral_noise.get([x/40.0, z/40.0]);
-
-                        if y > base_level+1.0 {
-                            if y <= Self::SEA_LEVEL {
-                                BlockCullType::BorderVisibleFluid0(Block(6))
-                            } else {
-                                BlockCullType::Empty
-                            }
-                        } else if y > base_level {
-                            if y <= Self::SEA_LEVEL {
-                                BlockCullType::BorderVisibleFluid0(Block(6))
-                            } else if 0.8 < floralness && floralness < 0.9 {
-                                if 0.84 < floralness && floralness < 0.86 {
-                                    BlockCullType::AlwaysVisible(Block(5))
-                                } else {
-                                    BlockCullType::AlwaysVisible(Block(4))
-                                }
-                            } else {
-                                BlockCullType::Empty
-                            }
-                        } else if y < Self::SAND_LEVEL {
-                            BlockCullType::BorderVisible0(Block(3))
-                        } else if y > base_level-1.0 {
-                            BlockCullType::BorderVisible0(Block(0))
-                        } else if y > base_level-3.0 {
-                            BlockCullType::BorderVisible0(Block(1))
-                        } else {
-                            BlockCullType::BorderVisible0(Block(2))
-                        }
-
-                        // if y > (x/20.0).sin()*10.0+(z/20.0).sin()*10.0  {
-                        //     BlockCullType::Empty
-                        // } else {
-                        //     BlockCullType::Opaque(Block(0))
-                        // }
-                        // if y as f64 > noise.get([x, z])  {
-                        //     BlockGen::Empty
-                        // } else {
-                        //     BlockGen::Opaque(Block(0))
-                        // }
-                    })
+                    raw_voxels.push(self.terrain_gen.get_block(x as f64, y as f64, z as f64));
+                    // raw_voxels.push({
+                    //     // TERRAIN GENERATION (NO SIDE EFFECT)
+                    //     let (x,y,z) = (x as f64, y as f64, z as f64);
+                    //
+                    //     let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
+                    //     let floralness = self.floral_noise.get([x/40.0, z/40.0]);
+                    //
+                    //     if y > base_level+1.0 {
+                    //         if y <= Self::SEA_LEVEL {
+                    //             BlockCullType::BorderVisibleFluid0(Block(6))
+                    //         } else {
+                    //             BlockCullType::Empty
+                    //         }
+                    //     } else if y > base_level {
+                    //         if y <= Self::SEA_LEVEL {
+                    //             BlockCullType::BorderVisibleFluid0(Block(6))
+                    //         } else if 0.8 < floralness && floralness < 0.9 {
+                    //             if 0.84 < floralness && floralness < 0.86 {
+                    //                 BlockCullType::AlwaysVisible(Block(5))
+                    //             } else {
+                    //                 BlockCullType::AlwaysVisible(Block(4))
+                    //             }
+                    //         } else {
+                    //             BlockCullType::Empty
+                    //         }
+                    //     } else if y < Self::SAND_LEVEL {
+                    //         BlockCullType::BorderVisible0(Block(3))
+                    //     } else if y > base_level-1.0 {
+                    //         BlockCullType::BorderVisible0(Block(0))
+                    //     } else if y > base_level-3.0 {
+                    //         BlockCullType::BorderVisible0(Block(1))
+                    //     } else {
+                    //         BlockCullType::BorderVisible0(Block(2))
+                    //     }
+                    //
+                    //     // if y > (x/20.0).sin()*10.0+(z/20.0).sin()*10.0  {
+                    //     //     BlockCullType::Empty
+                    //     // } else {
+                    //     //     BlockCullType::Opaque(Block(0))
+                    //     // }
+                    //     // if y as f64 > noise.get([x, z])  {
+                    //     //     BlockGen::Empty
+                    //     // } else {
+                    //     //     BlockGen::Opaque(Block(0))
+                    //     // }
+                    // })
                 }
             }
         }
@@ -109,7 +122,7 @@ impl ChunkGeneratable for ChunkGeneratorEF<'_> {
     }
 
     fn generate_mesh(&self, pos: Length3D, voxels: &[Self::P])
-        -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>
+        -> Vec<(Vec<Self::V>, Vec<Self::I>, Option<FaceDir>, RenderDataPurpose)>
     {
         // println!("GEN CHUNK MESH");
         let mut opaque_verts = vec![];
@@ -197,13 +210,17 @@ impl ChunkGeneratable for ChunkGeneratorEF<'_> {
         }
 
         vec![
-            (opaque_verts, opaque_inds, RenderDataPurpose::TerrainOpaque),
-            (transparent_verts, transparent_inds, RenderDataPurpose::TerrainTransparent),
-            (translucent_verts, translucent_inds, RenderDataPurpose::TerrainTranslucent),
+            (opaque_verts, opaque_inds, None, RenderDataPurpose::TerrainOpaque),
+            (transparent_verts, transparent_inds, None, RenderDataPurpose::TerrainTransparent),
+            (translucent_verts, translucent_inds, None, RenderDataPurpose::TerrainTranslucent),
         ]
     }
 
-    fn aggregate_mesh(&self, chunks: &HashMap<Position<Self::B>, Chunk<Self::P, Self::V, Self::I, Self::B>>) -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)> {
+    fn aggregate_mesh(&self,
+                      _central_pos: Length3D,
+                      chunks: &HashMap<Position<Self::B>, Chunk<Self::P, Self::V, Self::I, Self::B>>
+    ) -> Vec<(Vec<Self::V>, Vec<Self::I>, RenderDataPurpose)>
+    {
         println!("GEN AGGREGATED MESH");
 
         let mut opaque_verts = vec![];
@@ -217,7 +234,7 @@ impl ChunkGeneratable for ChunkGeneratorEF<'_> {
         let mut translucent_faces = 0;
 
         for chunk in chunks.values().filter(|c| c.visible()) {
-            for (vert, raw_ind, purpose) in chunk.mesh.iter() {
+            for (vert, raw_ind, _, purpose) in chunk.mesh.iter() {
                 match purpose {
                     RenderDataPurpose::TerrainOpaque => {
                         let mut ind = raw_ind.clone().iter().map(|i| i+opaque_faces*4).collect();
