@@ -70,8 +70,6 @@ impl ChunkGeneratable for ChunkGeneratorMF<'_> {
         let terrain_generator = |x: f64, y: f64, z: f64| {
             let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
             let floralness = self.floral_noise.get([x/40.0, z/40.0]);
-            // let base_level = x+z;
-            // let floralness = y;
 
             if y >= base_level+1.0 {
                 if y <= Self::SEA_LEVEL {
@@ -116,40 +114,68 @@ impl ChunkGeneratable for ChunkGeneratorMF<'_> {
         let y_ofs = pos.y.get::<blox>().ceil() as i32;
         let z_ofs = pos.z.get::<blox>().ceil() as i32;
 
-        let mut xy_grid: Vec<u16> = vec![0u16; (self.chunk_size*self.chunk_size) as usize];
-        let mut yz_grid: Vec<u16> = vec![0u16; (self.chunk_size*self.chunk_size) as usize];
-        let mut xz_grid: Vec<u16> = vec![0u16; (self.chunk_size*self.chunk_size) as usize];
+        let mut xy_grid: Vec<u16> = vec![0u16; (expanded_size*expanded_size) as usize];
+        let mut yz_grid: Vec<u16> = vec![0u16; (expanded_size*expanded_size) as usize];
+        let mut xz_grid: Vec<u16> = vec![0u16; (expanded_size*expanded_size) as usize];
 
-        let mut xz_max_height_bounds = vec![0; (self.chunk_size*self.chunk_size) as usize];
-        let mut min_height_bound = self.chunk_size-1u32;
+        // HEIGHT BOUNDS to optimize terrains generation that are commonly one side full of voxels and other side empty
+        // - note: the height bounds are increased by one (i.e. expanded_size-1u32+1u32) since the mesh fill list algo
+        //      needs to check one additional block (just like the expanded checking of the chunk size)
+
+        let mut xz_max_height_bounds = vec![0; (expanded_size*expanded_size) as usize];
+        let mut min_height_bound = expanded_size;
         let mut max_height_bound = 0u32;
 
-        for x in 0..self.chunk_size {
-            for z in 0..self.chunk_size {
+        for x in 0..expanded_size {
+            for z in 0..expanded_size {
                 let hb = opaque_block_max_height_bounds((x_ofs+x as i32) as f64, (z_ofs+z as i32) as f64).ceil() as isize;
-                xz_max_height_bounds[(x*self.chunk_size+z) as usize] = hb;
+                xz_max_height_bounds[(x*expanded_size+z) as usize] = hb;
                 if hb > max_height_bound as isize+y_ofs as isize {
-                    max_height_bound = (hb.clamp(y_ofs as isize, y_ofs as isize+(self.chunk_size-1) as isize)-y_ofs as isize) as u32;
+                    max_height_bound = (hb.clamp(y_ofs as isize, y_ofs as isize+expanded_size as isize)-y_ofs as isize) as u32;
                 }
                 if hb < min_height_bound as isize+y_ofs as isize {
-                    min_height_bound = (hb.clamp(y_ofs as isize, y_ofs as isize+(self.chunk_size-1) as isize)-y_ofs as isize) as u32;
+                    min_height_bound = (hb.clamp(y_ofs as isize, y_ofs as isize+expanded_size as isize)-y_ofs as isize) as u32;
                 }
             }
         }
 
-        for x in 0..self.chunk_size {
-            // println!("X: {:?}", x);
-            for z in 0..self.chunk_size {
-                // let height = opaque_block_max_height_bounds((x_ofs+x as i32) as f64, (z_ofs+z as i32) as f64).ceil() as isize;
-                let height = xz_max_height_bounds[(x*self.chunk_size+z) as usize];
+        // incremented max height bound to do the final block check vertically, for those faces on the top edge
+        max_height_bound = ((max_height_bound as isize+1).clamp(y_ofs as isize, y_ofs as isize+expanded_size as isize)-y_ofs as isize) as u32;
 
+        // println!("HB MIN: {:?} MAX: {:?}", min_height_bound, max_height_bound);
+
+        // for x == 0, set cells to start with closed
+        for y in 0..min_height_bound {
+            let mut xy_cell = &mut xy_grid[(0*expanded_size+y) as usize];
+            if *xy_cell%2 == 0 {
+                *xy_cell += 1;
+            }
+        }
+        for x in 0..expanded_size {
+            // for z == 0, set cells to start with closed
+            for y in 0..min_height_bound {
+                let mut yz_cell = &mut yz_grid[(y*expanded_size+0) as usize];
+                if *yz_cell%2 == 0 {
+                    *yz_cell += 1;
+                }
+            }
+            for z in 0..expanded_size {
+                // let height = opaque_block_max_height_bounds((x_ofs+x as i32) as f64, (z_ofs+z as i32) as f64).ceil() as isize;
+                let height = xz_max_height_bounds[(x*expanded_size+z) as usize];
 
                 // TODO: multiple height bounds when we add caves, overhangs, trees/models, etc.
+
+                // for y == 0, set cells to start with closed
+                let mut xz_cell = &mut xz_grid[(x*expanded_size+z) as usize];
+                if *xz_cell%2 == 0 {
+                    *xz_cell += 1;
+                }
+
                 for y in min_height_bound..max_height_bound {
                     let open = y_ofs as isize+y as isize >= height;
-                    let mut xy_cell = &mut xy_grid[(x*self.chunk_size+y) as usize];
-                    let mut yz_cell = &mut yz_grid[(y*self.chunk_size+z) as usize];
-                    let mut xz_cell = &mut xz_grid[(x*self.chunk_size+z) as usize];
+                    let mut xy_cell = &mut xy_grid[(x*expanded_size+y) as usize];
+                    let mut yz_cell = &mut yz_grid[(y*expanded_size+z) as usize];
+                    let mut xz_cell = &mut xz_grid[(x*expanded_size+z) as usize];
 
                     let lazy_block_gen = |dx: i32, dy: i32, dz: i32| {
                         terrain_generator((x_ofs+dx+x as i32) as f64, (y_ofs+dy+y as i32) as f64, (z_ofs+dz+z as i32) as f64)
@@ -193,7 +219,7 @@ impl ChunkGeneratable for ChunkGeneratorMF<'_> {
                         // current hit cell is set to opened that needs to be closed at the current block index
                         *xy_cell += 1;
 
-                        if z != 0 {
+                        if z > 0 || (z == 0 && !Self::check_block_obscured(lazy_block_gen(0, 0,-1))) {
                             fast_block_face_gen(lazy_block_gen(0, 0, 0), 0, 0, 0, FaceDir::BACK);
                         }
                     }
@@ -206,7 +232,7 @@ impl ChunkGeneratable for ChunkGeneratorMF<'_> {
                         // current hit cell is set to opened that needs to be closed at the current block index
                         *yz_cell += 1;
 
-                        if x != 0 {
+                        if x > 0 || (x == 0 && !Self::check_block_obscured(lazy_block_gen(-1, 0, 0))) {
                             fast_block_face_gen(lazy_block_gen(0, 0, 0), 0, 0, 0, FaceDir::LEFT);
                         }
                     }
@@ -219,28 +245,12 @@ impl ChunkGeneratable for ChunkGeneratorMF<'_> {
                         // current hit cell is set to opened that needs to be closed at the current block index
                         *xz_cell += 1;
 
-                        if y != 0 {
+                        if y > 0 || (y == 0 && !Self::check_block_obscured(lazy_block_gen( 0,-1, 0))) {
                             fast_block_face_gen(lazy_block_gen(0, 0, 0), 0, 0, 0, FaceDir::BOTTOM);
                         }
                     }
                 }
-                if x == 0 {
-                    for y in 0..min_height_bound {
-                        let mut xy_cell = &mut xy_grid[(x*self.chunk_size+y) as usize];
-                        if *xy_cell%2 == 0 {
-                            *xy_cell += 1;
-                        }
-                    }
-                }
-                if z == 0 {
-                    for y in 0..min_height_bound {
-                        let mut yz_cell = &mut yz_grid[(y*self.chunk_size+z) as usize];
-                        if *yz_cell%2 == 0 {
-                            *yz_cell += 1;
-                        }
-                    }
-                }
-                xz_grid[(x*self.chunk_size+z) as usize] += 1;
+                xz_grid[(x*expanded_size+z) as usize] += 1;
             }
         }
 

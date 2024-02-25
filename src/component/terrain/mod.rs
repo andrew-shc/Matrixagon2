@@ -215,15 +215,15 @@ impl Component for Terrain<'static> {
                 chunk_mesh_ef.update(UpdateChunk::Forced);
                 self.chunk_mesh_ef.replace(chunk_mesh_ef);
 
-                // let mut chunk_mesh_hf = ChunkMesh::new(
-                //     Length3D::origin(),
-                //     ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
-                //     ChunkGeneratorHF::new(
-                //         self.block_ind.clone(), txtr_mapper.clone()
-                //     ),
-                // );
-                // chunk_mesh_hf.update(UpdateChunk::Forced);
-                // self.chunk_mesh_hf.replace(chunk_mesh_hf);
+                let mut chunk_mesh_hf = ChunkMesh::new(
+                    Length3D::origin(),
+                    ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
+                    ChunkGeneratorHF::new(
+                        self.block_ind.clone(), txtr_mapper.clone()
+                    ),
+                );
+                chunk_mesh_hf.update(UpdateChunk::Forced);
+                self.chunk_mesh_hf.replace(chunk_mesh_hf);
 
                 let mut chunk_mesh_mf = ChunkMesh::new(
                     Length3D::origin(),
