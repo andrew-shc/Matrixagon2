@@ -56,22 +56,13 @@ pub(super) trait ChunkMeshUtil<'b> {
 
         let expanded_size = self.chunk_size()+1;
 
-        // let chunk_pos = |x: u32, y: u32, z: u32| (
-        //     pos.x.get::<blox>()+x as f32,
-        //     pos.y.get::<blox>()+y as f32,
-        //     -pos.z.get::<blox>()-z as f32
-        // );
-        // let x_ofs = pos.x.get::<blox>().ceil() as i32;
-        // let y_ofs = pos.y.get::<blox>().ceil() as i32;
-        // let z_ofs = pos.z.get::<blox>().ceil() as i32;
-
         let mut xy_grid: Vec<u16> = vec![0u16; (expanded_size*expanded_size) as usize];
         let mut yz_grid: Vec<u16> = vec![0u16; (expanded_size*expanded_size) as usize];
         let mut xz_grid: Vec<u16> = vec![0u16; (expanded_size*expanded_size) as usize];
 
         // HEIGHT BOUNDS to optimize terrains generation that are commonly one side full of voxels and other side empty
-        // - note: the height bounds are increased by one (i.e. expanded_size-1u32+1u32) since the mesh fill list algo
-        //      needs to check one additional block (just like the expanded checking of the chunk size)
+        // - note: the height bounds are increased by one (i.e. hb+1u32) since the mesh fill list algo
+        //      needs to check one additional block for the closing face (just like the expanded checking of the chunk size)
 
         let mut xz_max_height_bounds = vec![0i32; (expanded_size*expanded_size) as usize];
         let mut min_height_bound = expanded_size;
@@ -81,19 +72,14 @@ pub(super) trait ChunkMeshUtil<'b> {
             for z in 0..expanded_size {
                 let hb = self.terrain_gen().opaque_block_height_bound_test((ofs.0+x as i32) as f64, (ofs.2+z as i32) as f64).ceil() as i32;
                 xz_max_height_bounds[(x*expanded_size+z) as usize] = hb;
-                if hb > max_height_bound as i32+ofs.1 {
-                    max_height_bound = (hb-ofs.1).clamp(0i32, expanded_size as i32) as u32;
+                if hb-ofs.1+1 > max_height_bound as i32 {
+                    max_height_bound = (hb-ofs.1+1).clamp(0i32, expanded_size as i32) as u32;
                 }
-                if hb < min_height_bound as i32+ofs.1 {
+                if hb-ofs.1 < min_height_bound as i32 {
                     min_height_bound = (hb-ofs.1).clamp(0i32, expanded_size as i32) as u32;
                 }
             }
         }
-
-        // incremented max height bound to do the final block check vertically, for those faces on the top edge
-        max_height_bound = (max_height_bound+1).clamp(0u32, expanded_size);
-
-        // println!("HB MIN: {:?} MAX: {:?}", min_height_bound, max_height_bound);
 
         // for x == 0, set cells to start with closed
         for y in 0..min_height_bound {
@@ -112,7 +98,7 @@ pub(super) trait ChunkMeshUtil<'b> {
             }
             for z in 0..expanded_size {
                 // let height = opaque_block_max_height_bounds((x_ofs+x as i32) as f64, (z_ofs+z as i32) as f64).ceil() as isize;
-                let height = xz_max_height_bounds[(x*expanded_size+z) as usize];
+                let hb = xz_max_height_bounds[(x*expanded_size+z) as usize];
 
                 // TODO: multiple height bounds when we add caves, overhangs, trees/models, etc.
 
@@ -123,10 +109,10 @@ pub(super) trait ChunkMeshUtil<'b> {
                 }
 
                 for y in min_height_bound..max_height_bound {
-                    let open = ofs.1+y as i32 >= height;
+                    let open = ofs.1+y as i32 >= hb;
                     let mut xy_cell = &mut xy_grid[(x*expanded_size+y) as usize];
                     let mut yz_cell = &mut yz_grid[(y*expanded_size+z) as usize];
-                    let mut xz_cell = &mut xz_grid[(x*expanded_size+z) as usize];
+                    // let mut xz_cell = &mut xz_grid[(x*expanded_size+z) as usize];
 
                     let lazy_block_gen = |dx: i32, dy: i32, dz: i32| {
                         self.terrain_gen().get_block((ofs.0+dx+x as i32) as f64, (ofs.1+dy+y as i32) as f64, (ofs.2+dz+z as i32) as f64)
@@ -136,15 +122,13 @@ pub(super) trait ChunkMeshUtil<'b> {
                         total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
                         dx, dy, dz, face_dir, txtr_mapping
                     | {
-                        if self.check_coord_within_chunk(x as i32+dx,y as i32+dy,z as i32+dz) {
-                            let (mut verts, mut inds) = self.gen_face(
-                                chunk_pos((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32),
-                                *total_faces*4, face_dir, txtr_mapping, false
-                            );
-                            total_verts.append(&mut verts);
-                            total_inds.append(&mut inds);
-                            *total_faces += 1;
-                        }
+                        let (mut verts, mut inds) = self.gen_face(
+                            chunk_pos((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32),
+                            *total_faces*4, face_dir, txtr_mapping, false
+                        );
+                        total_verts.append(&mut verts);
+                        total_inds.append(&mut inds);
+                        *total_faces += 1;
                     };
 
                     let mut fast_block_face_gen = |block, verts, inds, faces, dx: i32, dy: i32, dz: i32, face_dir| {
@@ -162,66 +146,76 @@ pub(super) trait ChunkMeshUtil<'b> {
                         }
                     };
 
-                    if *xy_cell%2 == 1 && open {
-                        // current hit cell is set to closed that needs to be opened at the previous block index
-                        *xy_cell += 1;
-                        fast_block_face_gen(
-                            lazy_block_gen(0, 0,-1),
-                            &mut front_verts, &mut front_inds, &mut front_faces,
-                            0, 0,-1, FaceDir::FRONT
-                        );
-                    } else if *xy_cell%2 == 0 && !open {
-                        // current hit cell is set to opened that needs to be closed at the current block index
-                        *xy_cell += 1;
+                    // prevents rendering the current face direction on the extended chunk size for the other direction's block checking
+                    if x < self.chunk_size() && y < self.chunk_size() {
+                        if *xy_cell%2 == 1 && open {
+                            // current hit cell is set to closed that needs to be opened using previous block index
+                            *xy_cell += 1;
 
-                        if z > 0 || (z == 0 && !Self::check_block_obscured(lazy_block_gen(0, 0,-1))) {
                             fast_block_face_gen(
-                                lazy_block_gen(0, 0, 0),
-                                &mut back_verts, &mut back_inds, &mut back_faces,
-                                0, 0, 0, FaceDir::BACK
+                                lazy_block_gen(0, 0,-1),
+                                &mut front_verts, &mut front_inds, &mut front_faces,
+                                0, 0,-1, FaceDir::FRONT
                             );
+                        } else if *xy_cell%2 == 0 && !open {
+                            // current hit cell is set to opened that needs to be closed using current block index
+                            *xy_cell += 1;
+
+                            if 0 < z {
+                                fast_block_face_gen(
+                                    lazy_block_gen(0, 0, 0),
+                                    &mut back_verts, &mut back_inds, &mut back_faces,
+                                    0, 0, 0, FaceDir::BACK
+                                );
+                            }
                         }
                     }
 
-                    if *yz_cell%2 == 1 && open {
-                        // current hit cell is set to closed that needs to be opened at the previous block index
-                        *yz_cell += 1;
-                        fast_block_face_gen(
-                            lazy_block_gen(-1, 0, 0),
-                            &mut right_verts, &mut right_inds, &mut right_faces,
-                            -1, 0, 0, FaceDir::RIGHT
-                        );
-                    } else if *yz_cell%2 == 0 && !open {
-                        // current hit cell is set to opened that needs to be closed at the current block index
-                        *yz_cell += 1;
+                    if y < self.chunk_size() && z < self.chunk_size() {
+                        if *yz_cell%2 == 1 && open {
+                            // current hit cell is set to closed that needs to be opened using previous block index
+                            *yz_cell += 1;
 
-                        if x > 0 || (x == 0 && !Self::check_block_obscured(lazy_block_gen(-1, 0, 0))) {
                             fast_block_face_gen(
-                                lazy_block_gen(0, 0, 0),
-                                &mut left_verts, &mut left_inds, &mut left_faces,
-                                0, 0, 0, FaceDir::LEFT
+                                lazy_block_gen(-1, 0, 0),
+                                &mut right_verts, &mut right_inds, &mut right_faces,
+                                -1, 0, 0, FaceDir::RIGHT
                             );
+                        } else if *yz_cell%2 == 0 && !open {
+                            // current hit cell is set to opened that needs to be closed using current block index
+                            *yz_cell += 1;
+
+                            if x > 0 {
+                                fast_block_face_gen(
+                                    lazy_block_gen(0, 0, 0),
+                                    &mut left_verts, &mut left_inds, &mut left_faces,
+                                    0, 0, 0, FaceDir::LEFT
+                                );
+                            }
                         }
                     }
 
-                    if *xz_cell%2 == 1 && open {
-                        // current hit cell is set to closed that needs to be opened at the previous block index
-                        *xz_cell += 1;
-                        fast_block_face_gen(
-                            lazy_block_gen( 0,-1, 0),
-                            &mut top_verts, &mut top_inds, &mut top_faces,
-                            0, -1, 0, FaceDir::TOP
-                        );
-                    } else if *xz_cell%2 == 0 && !open {
-                        // current hit cell is set to opened that needs to be closed at the current block index
-                        *xz_cell += 1;
+                    if x < self.chunk_size() && z < self.chunk_size() {
+                        if *xz_cell%2 == 1 && open {
+                            // current hit cell is set to closed that needs to be opened using previous block index
+                            *xz_cell += 1;
 
-                        if y > 0 || (y == 0 && !Self::check_block_obscured(lazy_block_gen( 0,-1, 0))) {
                             fast_block_face_gen(
-                                lazy_block_gen(0, 0, 0),
-                                &mut bottom_verts, &mut bottom_inds, &mut bottom_faces,
-                                0, 0, 0, FaceDir::BOTTOM
+                                lazy_block_gen( 0,-1, 0),
+                                &mut top_verts, &mut top_inds, &mut top_faces,
+                                0, -1, 0, FaceDir::TOP
                             );
+                        } else if *xz_cell%2 == 0 && !open {
+                            // current hit cell is set to opened that needs to be closed using current block index
+                            *xz_cell += 1;
+
+                            if y > 0 {
+                                fast_block_face_gen(
+                                    lazy_block_gen(0, 0, 0),
+                                    &mut bottom_verts, &mut bottom_inds, &mut bottom_faces,
+                                    0, 0, 0, FaceDir::BOTTOM
+                                );
+                            }
                         }
                     }
                 }
@@ -255,7 +249,7 @@ pub(super) trait ChunkMeshUtil<'b> {
                             BlockCullType::BorderVisible0(block) |
                             BlockCullType::BorderVisibleFluid0(block) |
                             BlockCullType::AlwaysVisible(block)
-                            = self.terrain_gen().get_block((ofs.0+x as i32) as f64, (ofs.1+y as i32) as f64, (ofs.2+z as i32) as f64)
+                            = self.terrain_gen().get_block((ofs.0+x as i32) as f64, (y as i32) as f64, (ofs.2+z as i32) as f64)
                         {
                             // assumes floral mesh
 
@@ -264,7 +258,7 @@ pub(super) trait ChunkMeshUtil<'b> {
                             let txtr = block.texture_id;
 
                             let (mut xcross_verts, mut xcross_inds) = self.gen_xcross(
-                                chunk_pos(x, y as u32, z), transparent_faces*4, txtr,
+                                chunk_pos(x, (y as i32-ofs.1) as u32, z), transparent_faces*4, txtr,
                             );
                             transparent_verts.append(&mut xcross_verts);
                             transparent_inds.append(&mut xcross_inds);
@@ -279,6 +273,7 @@ pub(super) trait ChunkMeshUtil<'b> {
     }
 
 
+    // TODO: TEMPORARY
     fn temporary_fluid_mesher<C>(&self, ofs: (i32, i32, i32), chunk_pos: C) -> (Vec<ChunkVertex>, Vec<u32>)
         where C: Fn(u32, u32, u32) -> (f32, f32, f32)
     {
@@ -299,26 +294,20 @@ pub(super) trait ChunkMeshUtil<'b> {
                 if let Some(hb) = self.terrain_gen().fluid_height_existence_bound_test((ofs.0+x as i32) as f64, (ofs.2+z as i32) as f64) {
                     let hb = hb.ceil() as i32;
                     xz_max_height_bounds[(x*expanded_size+z) as usize] = Some(hb);
-                    if hb > max_height_bound as i32+ofs.1 {
-                        max_height_bound = (hb.clamp(ofs.1, ofs.1+expanded_size as i32)-ofs.1) as u32;
+                    if hb-ofs.1+1 > max_height_bound as i32 {
+                        max_height_bound = (hb-ofs.1+1).clamp(0i32, expanded_size as i32) as u32;
                     }
-                    if hb < min_height_bound as i32+ofs.1 {
-                        min_height_bound = (hb.clamp(ofs.1, ofs.1+expanded_size as i32)-ofs.1) as u32;
+                    if hb-ofs.1 < min_height_bound as i32 {
+                        min_height_bound = (hb-ofs.1).clamp(0i32, expanded_size as i32) as u32;
                     }
-                } else {
-                    xz_max_height_bounds[(x*expanded_size+z) as usize] = None;
-                };
+                }
             }
         }
-
-        // incremented max height bound to do the final block check vertically, for those faces on the top edge
-        max_height_bound = ((max_height_bound as isize+1).clamp(ofs.1 as isize, ofs.1 as isize+expanded_size as isize)-ofs.1 as isize) as u32;
-
-        // println!("HB MIN: {:?} MAX: {:?}", min_height_bound, max_height_bound);
 
         for x in 0..expanded_size {
             for z in 0..expanded_size {
                 // let height = opaque_block_max_height_bounds((x_ofs+x as i32) as f64, (z_ofs+z as i32) as f64).ceil() as isize;
+                // println!("??? {:?} {:?} = {:?}", x,z,  xz_max_height_bounds[(x*expanded_size+z) as usize]);
                 if let Some(height) = xz_max_height_bounds[(x*expanded_size+z) as usize] {
                     // TODO
                     // for y == 0, set cells to start with closed
@@ -339,7 +328,6 @@ pub(super) trait ChunkMeshUtil<'b> {
                             total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
                             dx, dy, dz, face_dir, txtr_mapping
                         | {
-                            if self.check_coord_within_chunk(x as i32+dx,y as i32+dy,z as i32+dz) {
                                 let (mut verts, mut inds) = self.gen_face(
                                     chunk_pos((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32),
                                     *total_faces*4, face_dir, txtr_mapping, false
@@ -347,7 +335,6 @@ pub(super) trait ChunkMeshUtil<'b> {
                                 total_verts.append(&mut verts);
                                 total_inds.append(&mut inds);
                                 *total_faces += 1;
-                            }
                         };
 
                         let mut fast_block_face_gen = |block, verts, inds, faces, dx: i32, dy: i32, dz: i32, face_dir| {
@@ -365,24 +352,27 @@ pub(super) trait ChunkMeshUtil<'b> {
                             }
                         };
 
-                        if *xz_cell%2 == 1 && open {
-                            // current hit cell is set to closed that needs to be opened at the previous block index
-                            *xz_cell += 1;
-                            fast_block_face_gen(
-                                lazy_block_gen( 0,-1, 0),
-                                &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
-                                0, -1, 0, FaceDir::TOP
-                            );
-                        } else if *xz_cell%2 == 0 && !open {
-                            // current hit cell is set to opened that needs to be closed at the current block index
-                            *xz_cell += 1;
+                        if x < self.chunk_size() && z < self.chunk_size() {
+                            if *xz_cell%2 == 1 && open {
+                                // current hit cell is set to closed that needs to be opened using previous block index
+                                *xz_cell += 1;
 
-                            if y > 0 || (y == 0 && !Self::check_block_obscured(lazy_block_gen( 0,-1, 0))) {
                                 fast_block_face_gen(
-                                    lazy_block_gen(0, 0, 0),
+                                    lazy_block_gen( 0,-1, 0),
                                     &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
-                                    0, 0, 0, FaceDir::BOTTOM
+                                    0, -1, 0, FaceDir::TOP
                                 );
+                            } else if *xz_cell%2 == 0 && !open {
+                                // current hit cell is set to opened that needs to be closed using current block index
+                                *xz_cell += 1;
+
+                                if y > 0 {
+                                    fast_block_face_gen(
+                                        lazy_block_gen(0, 0, 0),
+                                        &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
+                                        0, 0, 0, FaceDir::BOTTOM
+                                    );
+                                }
                             }
                         }
                     }
@@ -393,22 +383,6 @@ pub(super) trait ChunkMeshUtil<'b> {
 
         (translucent_verts, translucent_inds)
     }
-
-    // fn reverse_access(&self, inverse: bool, pos: Length3D, i: f32) -> Option<(f64, f64, f64)> {
-    //     let y = (i/(self.chunk_size() as f32*self.chunk_size() as f32)).floor();
-    //     let x = ((i-y*self.chunk_size() as f32*self.chunk_size() as f32)/self.chunk_size() as f32).floor();
-    //     let z = (i-y*self.chunk_size() as f32*self.chunk_size() as f32) % self.chunk_size() as f32;
-    //     let mut ofs = if inverse {1} else {0};
-    //     ofs += y%2.0;
-    //     ofs += z%2.0;
-    //     if (x+y+z+ofs)%2 == 0 {
-    //         Some(
-    //             (x as f64+pos.x.get::<blox>() as f64, y as f64+pos.y.get::<blox>() as f64, z as f64+pos.z.get::<blox>() as f64)
-    //         )
-    //     } else {
-    //         None
-    //     }
-    // }
 
     fn block_culling(&self, voxel: &mut Box<[BlockCullType]>) {
         for x in 1..self.chunk_size()-1 {

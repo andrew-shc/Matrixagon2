@@ -52,6 +52,7 @@ impl TerrainGenerator {
     }
 
     // opaque block height-NBT
+    // WHEN THE TERRAIN BEGINS TO BE NOTHING (AFTER OPAQUE BREAK)
     pub(super) fn opaque_block_height_bound_test(&self, x: f64, z: f64) -> f64 {
         let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
 
@@ -83,8 +84,8 @@ impl TerrainGenerator {
     pub(super) fn fluid_height_existence_bound_test(&self, x: f64, z: f64) -> Option<f64> {
         let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
 
-        // covers base_level+1.0
-        if base_level <= Self::SEA_LEVEL {
+        // covers base_level+1.0 and base_level
+        if base_level+1.0 <= Self::SEA_LEVEL {
             Some(Self::SEA_LEVEL)
         } else {
             None

@@ -76,7 +76,17 @@ pub(crate) unsafe fn standard_graphics_pipeline(
         ..Default::default()
     };
 
-    let mut rasterizer_info = vk::PipelineRasterizationStateCreateInfo {
+    let rasterizer_info_cull_back = vk::PipelineRasterizationStateCreateInfo {
+        depth_clamp_enable: vk::FALSE,
+        rasterizer_discard_enable: vk::FALSE,
+        polygon_mode: vk::PolygonMode::FILL,
+        line_width: 1.0,
+        cull_mode: vk::CullModeFlags::BACK,
+        front_face: vk::FrontFace::COUNTER_CLOCKWISE,
+        depth_bias_enable: vk::FALSE,
+        ..Default::default()
+    };
+    let rasterizer_info_cull_none = vk::PipelineRasterizationStateCreateInfo {
         depth_clamp_enable: vk::FALSE,
         rasterizer_discard_enable: vk::FALSE,
         polygon_mode: vk::PolygonMode::FILL,
@@ -109,6 +119,9 @@ pub(crate) unsafe fn standard_graphics_pipeline(
 
     let mut pipeline_create_infos = vec![];
 
+    // keep referenced object alive
+    let mut color_blend_infos = vec![];
+
     for info in pipeline_infos {
         let color_blend_info = vk::PipelineColorBlendStateCreateInfo::builder()
             .logic_op_enable(false)
@@ -116,19 +129,13 @@ pub(crate) unsafe fn standard_graphics_pipeline(
             .blend_constants([0.0, 0.0, 0.0, 0.0])
             .build();
 
-        if info.back_face_culling {
-            rasterizer_info.cull_mode = vk::CullModeFlags::BACK;
-        } else {
-            rasterizer_info.cull_mode = vk::CullModeFlags::NONE;
-        }
-
         let pipeline_create_info = vk::GraphicsPipelineCreateInfo {
             stage_count: info.shader_stages.len() as u32,
             p_stages: info.shader_stages.as_ptr(),
             p_vertex_input_state: &info.vertex_input_state,
             p_input_assembly_state: &input_assembly_info,
             p_viewport_state: &viewport_state_info,
-            p_rasterization_state: &rasterizer_info,
+            p_rasterization_state: if info.back_face_culling {&rasterizer_info_cull_back} else {&rasterizer_info_cull_none},
             p_multisample_state: &multisampling_info,
             p_depth_stencil_state: if info.depth_testing {&depth_stencil} else {&vk::PipelineDepthStencilStateCreateInfo::default()},
             p_color_blend_state: &color_blend_info,
@@ -141,6 +148,7 @@ pub(crate) unsafe fn standard_graphics_pipeline(
         };
 
         pipeline_create_infos.push(pipeline_create_info);
+        color_blend_infos.push(color_blend_info);
     }
 
     device.create_graphics_pipelines(vk::PipelineCache::null(), &pipeline_create_infos, None)
