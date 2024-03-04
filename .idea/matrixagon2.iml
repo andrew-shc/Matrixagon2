@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/test_uom/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/benches" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target" />
       <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/ahash-47b990802fd96b56/out" />
       <excludeFolder url="file://$MODULE_DIR$/mtxg2gp/target/debug/build/ash-4ed623b90ab5b10e/out" />

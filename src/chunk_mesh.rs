@@ -13,7 +13,7 @@ pub(crate) trait BlockLengthUnit: uom::si::length::Unit + uom::Conversion<f32, T
 impl<T> BlockLengthUnit for T where T: uom::si::length::Unit + uom::Conversion<f32, T = f32> {}
 
 
-pub(crate) trait ChunkGeneratable {
+pub trait ChunkGeneratable {
     type A: BlockLengthUnit;  // border outer radius
     type B: BlockLengthUnit;  // empty inner radius
     type V;
@@ -75,17 +75,17 @@ impl<M: BlockLengthUnit> Position<M> {
 }
 
 
-pub(crate) enum UpdateChunk {
+pub enum UpdateChunk {
     NewPos(Length3D),
     Forced
 }
 
 // border_radius, update_radius
 #[derive(Copy, Clone)]
-pub(crate) struct ChunkRadius(pub(crate) u32, pub(crate) u32);
+pub struct ChunkRadius(pub u32, pub u32);
 
 
-pub(crate) struct ChunkMesh<G: ChunkGeneratable> {
+pub struct ChunkMesh<G: ChunkGeneratable> {
     pub(crate) central_pos: Length3D,
     inner_central_pos: Length3D,
     chunk_size: Length3D,
@@ -102,7 +102,7 @@ pub(crate) struct ChunkMesh<G: ChunkGeneratable> {
 }
 
 impl<G: ChunkGeneratable> ChunkMesh<G> {
-    pub(crate) fn new(pos: Length3D, outer: ChunkRadius, inner: Option<ChunkRadius>, generator: G) -> Self {
+    pub fn new(pos: Length3D, outer: ChunkRadius, inner: Option<ChunkRadius>, generator: G) -> Self {
         Self {
             central_pos: pos,
             inner_central_pos: pos,
@@ -126,7 +126,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
         self.generator = generator;
     }
 
-    pub(crate) fn update(&mut self, mode: UpdateChunk) -> bool {
+    pub fn update(&mut self, mode: UpdateChunk) -> bool {
         let mut pos_changed = false;
         let mut inner_chunk_update = false;
         let mut chunk_changed = false;

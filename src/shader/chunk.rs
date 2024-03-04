@@ -8,7 +8,7 @@ use crate::shader::{DescriptorManager, destroy_shader_modules, disabled_cba, gen
 use crate::shader::debug_ui::DebugUISubShader;
 
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct ChunkVertex {
+pub struct ChunkVertex {
     pub(crate) pos: [f32; 3],
     pub(crate) uv: [f32; 2],
     pub(crate) txtr: f32,

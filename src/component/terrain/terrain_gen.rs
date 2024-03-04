@@ -3,7 +3,7 @@ use crate::component::terrain::{Block, BlockCullType};
 
 
 
-pub(super) struct TerrainGenerator {
+pub struct TerrainGenerator {
     noise: Perlin,
     floral_noise: Perlin,
 }
@@ -12,7 +12,7 @@ impl TerrainGenerator {
     const SEA_LEVEL: f64 = 10.0;
     const SAND_LEVEL: f64 = 13.0;
 
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             noise: Perlin::new(50), floral_noise: Perlin::new(23),
         }

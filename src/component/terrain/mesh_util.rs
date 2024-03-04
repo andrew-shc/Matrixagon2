@@ -306,8 +306,6 @@ pub(super) trait ChunkMeshUtil<'b> {
 
         for x in 0..expanded_size {
             for z in 0..expanded_size {
-                // let height = opaque_block_max_height_bounds((x_ofs+x as i32) as f64, (z_ofs+z as i32) as f64).ceil() as isize;
-                // println!("??? {:?} {:?} = {:?}", x,z,  xz_max_height_bounds[(x*expanded_size+z) as usize]);
                 if let Some(height) = xz_max_height_bounds[(x*expanded_size+z) as usize] {
                     // TODO
                     // for y == 0, set cells to start with closed

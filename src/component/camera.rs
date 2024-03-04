@@ -14,15 +14,16 @@ use crate::util::{create_host_buffer, matrix_ident, update_buffer};
 
 
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct Length3D {
+pub struct Length3D {
     pub(crate) x: Length, pub(crate) y: Length, pub(crate) z: Length,
 }
 
 impl Length3D {
-    pub(crate) fn new(x: Length, y: Length, z: Length) -> Self {
+    pub fn new(x: Length, y: Length, z: Length) -> Self {
         Self {x,y,z}
     }
-    pub(crate) fn origin() -> Self {
+
+    pub fn origin() -> Self {
         Self {
             x: Length::new::<blox>(0.0),
             y: Length::new::<blox>(0.0),

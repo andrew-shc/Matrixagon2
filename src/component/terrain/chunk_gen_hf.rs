@@ -12,7 +12,7 @@ use crate::component::texture::TextureIDMapper;
 use crate::measurement::{blox, chux, chux_hf};
 use crate::shader::chunk::ChunkVertex;
 
-pub(super) struct ChunkGeneratorHF<'b> {
+pub struct ChunkGeneratorHF<'b> {
     chunk_size: u32,
     block_ind: Vec<BlockData<'b>>,
     txtr_id_mapper: TextureIDMapper,
@@ -22,7 +22,7 @@ pub(super) struct ChunkGeneratorHF<'b> {
 }
 
 impl<'b> ChunkGeneratorHF<'b> {
-    pub(super) fn new(block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper, terrain_gen: Rc<TerrainGenerator>) -> Self {
+    pub fn new(block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper, terrain_gen: Rc<TerrainGenerator>) -> Self {
         Self {
             chunk_size: Length::new::<<Self as ChunkGeneratable>::B>(1.0).get::<blox>() as u32, block_ind, txtr_id_mapper,
             // noise: Perlin::new(50), floral_noise: Perlin::new(23),

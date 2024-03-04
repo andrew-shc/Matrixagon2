@@ -1,8 +1,8 @@
-mod chunk_gen;
-mod chunk_gen_hf;
-mod chunk_gen_mf;
-mod mesh_util;
-mod terrain_gen;
+pub mod chunk_gen;
+pub mod chunk_gen_hf;
+pub mod chunk_gen_mf;
+pub mod mesh_util;
+pub mod terrain_gen;
 
 use std::rc::Rc;
 use ash::{Device, vk};
@@ -21,7 +21,7 @@ use crate::world::WorldEvent;
 
 
 #[derive(Copy, Clone)]
-pub(crate) enum FaceDir {
+pub enum FaceDir {
     FRONT,
     RIGHT,
     BACK,
