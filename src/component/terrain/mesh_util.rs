@@ -1,6 +1,5 @@
-use std::mem;
 use std::rc::Rc;
-use crate::component::terrain::{Block, BlockCullType, BlockData, FaceDir, TextureMapper};
+use crate::component::terrain::{BlockData, FaceDir, TextureMapper};
 use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::component::texture::TextureIDMapper;
 use crate::shader::chunk::ChunkVertex;
@@ -18,18 +17,6 @@ pub(super) trait ChunkMeshUtil<'b> {
     fn access(&self, x: u32, y: u32, z: u32) -> usize {
         let size = self.chunk_size();
         (y*size*size+x*size+z) as usize
-    }
-
-    fn check_block_obscured(block: BlockCullType) -> bool {
-        mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisible0(Block::default())) ||
-            mem::discriminant(&block) == mem::discriminant(&BlockCullType::Obscured)
-    }
-
-    fn check_fluid_obscured(block: BlockCullType) -> bool {
-        mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisibleFluid0(Block::default())) ||
-            mem::discriminant(&block) == mem::discriminant(&BlockCullType::ObscuredFluid) ||
-            mem::discriminant(&block) == mem::discriminant(&BlockCullType::BorderVisible0(Block::default())) ||
-            mem::discriminant(&block) == mem::discriminant(&BlockCullType::Obscured)
     }
 
     fn voluminous_opaque_cubes_mesh<C>(&self, ofs: (i32, i32, i32), chunk_pos: C) -> [(Vec<ChunkVertex>, Vec<u32>, FaceDir); 6]
@@ -132,12 +119,7 @@ pub(super) trait ChunkMeshUtil<'b> {
                     };
 
                     let mut fast_block_face_gen = |block, verts, inds, faces, dx: i32, dy: i32, dz: i32, face_dir| {
-                        if let
-                            BlockCullType::BorderVisible0(block) |
-                            BlockCullType::BorderVisibleFluid0(block) |
-                            BlockCullType::AlwaysVisible(block)
-                            = &block
-                        {
+                        if let Some(block) = &block {
                             let block = self.block_ind(block.0 as usize);
                             let txtr = block.texture_id;
 
@@ -245,10 +227,7 @@ pub(super) trait ChunkMeshUtil<'b> {
                 if let Some(y) = self.terrain_gen().floral_existence_bound_test((ofs.0+x as i32) as f64, (ofs.2+z as i32) as f64) {
                     let y = y.ceil();
                     if ofs.1 as f64 <= y && y < ofs.1 as f64+self.chunk_size() as f64 {
-                        if let
-                            BlockCullType::BorderVisible0(block) |
-                            BlockCullType::BorderVisibleFluid0(block) |
-                            BlockCullType::AlwaysVisible(block)
+                        if let Some(block)
                             = self.terrain_gen().get_block((ofs.0+x as i32) as f64, (y as i32) as f64, (ofs.2+z as i32) as f64)
                         {
                             // assumes floral mesh
@@ -336,12 +315,7 @@ pub(super) trait ChunkMeshUtil<'b> {
                         };
 
                         let mut fast_block_face_gen = |block, verts, inds, faces, dx: i32, dy: i32, dz: i32, face_dir| {
-                            if let
-                                BlockCullType::BorderVisible0(block) |
-                                BlockCullType::BorderVisibleFluid0(block) |
-                                BlockCullType::AlwaysVisible(block)
-                                = &block
-                            {
+                            if let Some(block) = &block {
                                 let block = self.block_ind(block.0 as usize);
                                 let txtr = block.texture_id;
 
@@ -380,40 +354,6 @@ pub(super) trait ChunkMeshUtil<'b> {
         }
 
         (translucent_verts, translucent_inds)
-    }
-
-    fn block_culling(&self, voxel: &mut Box<[BlockCullType]>) {
-        for x in 1..self.chunk_size()-1 {
-            for y in 1..self.chunk_size()-1 {
-                for z in 1..self.chunk_size()-1 {
-                    match voxel[self.access(x,y,z)] {
-                        BlockCullType::BorderVisible0(_) if
-                        Self::check_block_obscured(voxel[self.access(x+1,y,z)]) &&
-                            Self::check_block_obscured(voxel[self.access(x-1,y,z)]) &&
-                            Self::check_block_obscured(voxel[self.access(x,y+1,z)]) &&
-                            Self::check_block_obscured(voxel[self.access(x,y-1,z)]) &&
-                            Self::check_block_obscured(voxel[self.access(x,y,z+1)]) &&
-                            Self::check_block_obscured(voxel[self.access(x,y,z-1)]) => {
-                            voxel[self.access(x,y,z)] = BlockCullType::Obscured;
-                        }
-                        BlockCullType::BorderVisibleFluid0(_) if
-                        Self::check_fluid_obscured(voxel[self.access(x+1,y,z)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x-1,y,z)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x,y+1,z)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x,y-1,z)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x,y,z+1)]) &&
-                            Self::check_fluid_obscured(voxel[self.access(x,y,z-1)]) => {
-                            voxel[self.access(x,y,z)] = BlockCullType::ObscuredFluid;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-    }
-
-    fn check_coord_within_chunk(&self, x: i32, y: i32, z: i32) -> bool {
-        0 <= x && x < self.chunk_size() as i32 && 0 <= y && y < self.chunk_size() as i32 && 0 <= z && z < self.chunk_size() as i32
     }
 
     fn gen_face(&self, loc: (f32, f32, f32), ind_ofs: u32, face: FaceDir, txtr_mapping: TextureMapper, fluid: bool) -> (Vec<ChunkVertex>, Vec<u32>) {

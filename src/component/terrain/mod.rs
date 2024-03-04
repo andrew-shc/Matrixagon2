@@ -46,38 +46,6 @@ pub enum TransparencyType {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum BlockCullType {
-    Empty,
-    AlwaysVisible(Block),  // always visible (not culled) regardless of any adjacent condition
-    BorderVisible0(Block),  // visible only if any of its adjacent side is Empty|AlwaysVisible|BorderVisibleFluid|ObscuredFluid
-    BorderVisible1(Block),  // a block is adjacent
-    BorderVisible2(Block),  // two blocks are adjacent
-    BorderVisible3(Block),  // three blocks are adjacent
-    BorderVisibleFluid0(Block),  // visible only if any of its adjacent side is Empty|AlwaysVisible
-    BorderVisibleFluid1(Block),
-    BorderVisibleFluid2(Block),
-    BorderVisibleFluid3(Block),
-    Obscured,  // when BorderVisible is surrounded by other BorderVisible|Obscured
-    ObscuredFluid,  // when BorderVisibleFluid is surrounded by other BorderVisible|BorderVisibleFluid|Obscured|ObscuredFluid
-}
-
-impl BlockCullType {
-    pub fn decrease_visibility(self) -> Self {
-        match self {
-            BlockCullType::BorderVisible0(b) => {BlockCullType::BorderVisible1(b)}
-            BlockCullType::BorderVisible1(b) => {BlockCullType::BorderVisible2(b)}
-            BlockCullType::BorderVisible2(b) => {BlockCullType::BorderVisible3(b)}
-            BlockCullType::BorderVisible3(_) => {BlockCullType::Obscured}
-            BlockCullType::BorderVisibleFluid0(f) => {BlockCullType::BorderVisibleFluid1(f)}
-            BlockCullType::BorderVisibleFluid1(f) => {BlockCullType::BorderVisibleFluid2(f)}
-            BlockCullType::BorderVisibleFluid2(f) => {BlockCullType::BorderVisibleFluid3(f)}
-            BlockCullType::BorderVisibleFluid3(_) => {BlockCullType::ObscuredFluid}
-            _ => {self}
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
 pub enum TextureMapper<'s> {
     All(&'s str),
     Lateral(&'s str, &'s str, &'s str),  // top, bottom, lateral

@@ -5,7 +5,7 @@ use uom::si::f32::Length;
 use crate::chunk_mesh::{Chunk, ChunkGeneratable, Position};
 use crate::component::camera::Length3D;
 use crate::component::RenderDataPurpose;
-use crate::component::terrain::{BlockCullType, BlockData, FaceDir, MeshType, TransparencyType};
+use crate::component::terrain::{BlockData, FaceDir};
 use crate::component::terrain::mesh_util::ChunkMeshUtil;
 use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::component::texture::TextureIDMapper;

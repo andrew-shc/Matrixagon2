@@ -1,5 +1,5 @@
 use noise::{NoiseFn, Perlin};
-use crate::component::terrain::{Block, BlockCullType};
+use crate::component::terrain::{Block};
 
 
 
@@ -18,36 +18,36 @@ impl TerrainGenerator {
         }
     }
 
-    pub(super) fn get_block(&self, x: f64, y: f64, z: f64) -> BlockCullType {
+    pub(super) fn get_block(&self, x: f64, y: f64, z: f64) -> Option<Block> {
         let base_level = self.noise.get([x/20.0, z/20.0])*20.0+20.0;
         let floralness = self.floral_noise.get([x/40.0, z/40.0]);
 
         if y >= base_level+1.0 {
             if y <= Self::SEA_LEVEL {
-                BlockCullType::BorderVisibleFluid0(Block(6))
+                Some(Block(6))
             } else {
-                BlockCullType::Empty
+                None
             }
         } else if y >= base_level {
             if y <= Self::SEA_LEVEL {
-                BlockCullType::BorderVisibleFluid0(Block(6))
+                Some(Block(6))
             } else if 0.8 <= floralness && floralness <= 0.9 {
                 if 0.84 <= floralness && floralness <= 0.86 {
-                    BlockCullType::AlwaysVisible(Block(5))
+                    Some(Block(5))
                 } else {
-                    BlockCullType::AlwaysVisible(Block(4))
+                    Some(Block(4))
                 }
             } else {
-                BlockCullType::Empty
+                None
             }
         } else if y <= Self::SAND_LEVEL {
-            BlockCullType::BorderVisible0(Block(3))
+            Some(Block(3))
         } else if y >= base_level-1.0 {
-            BlockCullType::BorderVisible0(Block(0))
+            Some(Block(0))
         } else if y >= base_level-3.0 {
-            BlockCullType::BorderVisible0(Block(1))
+            Some(Block(1))
         } else {
-            BlockCullType::BorderVisible0(Block(2))
+            Some(Block(2))
         }
     }
 
