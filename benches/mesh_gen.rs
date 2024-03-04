@@ -63,7 +63,7 @@ const BLOCK_INDEX: [BlockData; 8] = [
 pub fn benchmark_chunk_mesh_generation(c: &mut Criterion) {
     c.bench_function(
         "Single MF Chunk @(0,0,0) - Mesh Generation",
-        |b| b.iter(|| {
+        |b| b.iter_with_large_drop(|| {
             let chunk_generator = ChunkGeneratorMF::new(
                 Vec::from(BLOCK_INDEX),
                 Rc::new(HashMap::from([
@@ -79,7 +79,7 @@ pub fn benchmark_chunk_mesh_generation(c: &mut Criterion) {
 pub fn benchmark_chunk_aggregate_mesh(c: &mut Criterion) {
     c.bench_function(
         "Chunk Mesh Handler 4x4x4 MF - Mesh Generation & Aggregation",
-        |b| b.iter(|| {
+        |b| b.iter_with_large_drop(|| {
             let mut chunk_mesh_mf = ChunkMesh::new(
                 Length3D::origin(),
                 ChunkRadius(2, 1), Some(ChunkRadius(2, 1)),

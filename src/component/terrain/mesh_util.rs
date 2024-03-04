@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use crate::component::terrain::{BlockData, FaceDir, TextureMapper};
+use crate::component::terrain::{Block, BlockData, FaceDir, TextureMapper};
 use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::component::texture::TextureIDMapper;
 use crate::shader::chunk::ChunkVertex;
@@ -24,22 +24,22 @@ pub(super) trait ChunkMeshUtil<'b> {
     {
         let mut top_verts = vec![];
         let mut top_inds = vec![];
-        let mut top_faces = 0;
+        let mut top_faces = 0u32;
         let mut bottom_verts = vec![];
         let mut bottom_inds = vec![];
-        let mut bottom_faces = 0;
+        let mut bottom_faces = 0u32;
         let mut left_verts = vec![];
         let mut left_inds = vec![];
-        let mut left_faces = 0;
+        let mut left_faces = 0u32;
         let mut right_verts = vec![];
         let mut right_inds = vec![];
-        let mut right_faces = 0;
+        let mut right_faces = 0u32;
         let mut front_verts = vec![];
         let mut front_inds = vec![];
-        let mut front_faces = 0;
+        let mut front_faces = 0u32;
         let mut back_verts = vec![];
         let mut back_inds = vec![];
-        let mut back_faces = 0;
+        let mut back_faces = 0u32;
 
         let expanded_size = self.chunk_size()+1;
 
@@ -105,26 +105,23 @@ pub(super) trait ChunkMeshUtil<'b> {
                         self.terrain_gen().get_block((ofs.0+dx+x as i32) as f64, (ofs.1+dy+y as i32) as f64, (ofs.2+dz+z as i32) as f64)
                     };
 
-                    let mut fast_face_gen = |
-                        total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
-                        dx, dy, dz, face_dir, txtr_mapping
+                    let mut fast_block_face_gen = |
+                        block: Option<Block>, total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
+                        dx: i32, dy: i32, dz: i32, face_dir
                     | {
-                        let (mut verts, mut inds) = self.gen_face(
-                            chunk_pos((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32),
-                            *total_faces*4, face_dir, txtr_mapping, false
-                        );
-                        total_verts.append(&mut verts);
-                        total_inds.append(&mut inds);
-                        *total_faces += 1;
-                    };
-
-                    let mut fast_block_face_gen = |block, verts, inds, faces, dx: i32, dy: i32, dz: i32, face_dir| {
-                        if let Some(block) = &block {
+                        if let Some(block) = block {
                             let block = self.block_ind(block.0 as usize);
                             let txtr = block.texture_id;
 
                             // mesh assumed to be (opaque) cube
-                            fast_face_gen(verts, inds, faces, dx, dy, dz, face_dir, txtr);
+
+                            let (mut verts, mut inds) = self.gen_face(
+                                chunk_pos((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32),
+                                *total_faces*4, face_dir, txtr, false
+                            );
+                            total_verts.append(&mut verts);
+                            total_inds.append(&mut inds);
+                            *total_faces += 1;
                         }
                     };
 
@@ -258,7 +255,7 @@ pub(super) trait ChunkMeshUtil<'b> {
     {
         let mut translucent_verts = vec![];
         let mut translucent_inds = vec![];
-        let mut translucent_faces = 0;
+        let mut translucent_faces = 0u32;
 
         let expanded_size = self.chunk_size()+1;
 
@@ -301,26 +298,23 @@ pub(super) trait ChunkMeshUtil<'b> {
                             self.terrain_gen().get_block((ofs.0+dx+x as i32) as f64, (ofs.1+dy+y as i32) as f64, (ofs.2+dz+z as i32) as f64)
                         };
 
-                        let mut fast_face_gen = |
-                            total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
-                            dx, dy, dz, face_dir, txtr_mapping
+                        let mut fast_fluid_face_gen = |
+                            block: Option<Block>, total_verts: &mut Vec<ChunkVertex>, total_inds: &mut Vec<u32>, total_faces: &mut u32,
+                            dx: i32, dy: i32, dz: i32, face_dir
                         | {
+                            if let Some(block) = block {
+                                let block = self.block_ind(block.0 as usize);
+                                let txtr = block.texture_id;
+
+                                // mesh assumed to be (translucent) fluid
+
                                 let (mut verts, mut inds) = self.gen_face(
                                     chunk_pos((x as i32+dx) as u32,(y as i32+dy) as u32,(z as i32+dz) as u32),
-                                    *total_faces*4, face_dir, txtr_mapping, false
+                                    *total_faces*4, face_dir, txtr, false
                                 );
                                 total_verts.append(&mut verts);
                                 total_inds.append(&mut inds);
                                 *total_faces += 1;
-                        };
-
-                        let mut fast_block_face_gen = |block, verts, inds, faces, dx: i32, dy: i32, dz: i32, face_dir| {
-                            if let Some(block) = &block {
-                                let block = self.block_ind(block.0 as usize);
-                                let txtr = block.texture_id;
-
-                                // mesh assumed to be (opaque) cube
-                                fast_face_gen(verts, inds, faces, dx, dy, dz, face_dir, txtr);
                             }
                         };
 
@@ -329,7 +323,7 @@ pub(super) trait ChunkMeshUtil<'b> {
                                 // current hit cell is set to closed that needs to be opened using previous block index
                                 *xz_cell += 1;
 
-                                fast_block_face_gen(
+                                fast_fluid_face_gen(
                                     lazy_block_gen( 0,-1, 0),
                                     &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
                                     0, -1, 0, FaceDir::TOP
@@ -339,7 +333,7 @@ pub(super) trait ChunkMeshUtil<'b> {
                                 *xz_cell += 1;
 
                                 if y > 0 {
-                                    fast_block_face_gen(
+                                    fast_fluid_face_gen(
                                         lazy_block_gen(0, 0, 0),
                                         &mut translucent_verts, &mut translucent_inds, &mut translucent_faces,
                                         0, 0, 0, FaceDir::BOTTOM
