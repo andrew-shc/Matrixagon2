@@ -85,34 +85,34 @@ impl ChunkGeneratable for ChunkGeneratorEF<'_> {
 
         let mut opaque_verts = vec![];
         let mut opaque_inds = vec![];
-        let mut opaque_faces = 0;
+        let mut opaque_ind_count = 0;
         let mut transparent_verts = vec![];
         let mut transparent_inds = vec![];
-        let mut transparent_faces = 0;
+        let mut transparent_ind_count = 0;
         let mut translucent_verts = vec![];
         let mut translucent_inds = vec![];
-        let mut translucent_faces = 0;
+        let mut translucent_ind_count = 0;
 
         for chunk in chunks.values().filter(|c| c.visible()) {
             for (vert, raw_ind, _, purpose) in chunk.mesh.iter() {
                 match purpose {
                     RenderDataPurpose::TerrainOpaque => {
-                        let mut ind = raw_ind.clone().iter().map(|i| i+opaque_faces*4).collect();
-                        opaque_faces += vert.len() as u32/4;  // 4 vertices in each face
+                        let mut ind = raw_ind.clone().iter().map(|i| i+opaque_ind_count).collect();
+                        opaque_ind_count += vert.len() as u32;
 
                         opaque_verts.append(&mut vert.clone());
                         opaque_inds.append(&mut ind);
                     }
                     RenderDataPurpose::TerrainTransparent => {
-                        let mut ind = raw_ind.clone().iter().map(|i| i+transparent_faces*4).collect();
-                        transparent_faces += vert.len() as u32/4;  // 4 vertices in each face
+                        let mut ind = raw_ind.clone().iter().map(|i| i+transparent_ind_count).collect();
+                        transparent_ind_count += vert.len() as u32;
 
                         transparent_verts.append(&mut vert.clone());
                         transparent_inds.append(&mut ind);
                     }
                     RenderDataPurpose::TerrainTranslucent => {
-                        let mut ind = raw_ind.clone().iter().map(|i| i+translucent_faces*4).collect();
-                        translucent_faces += vert.len() as u32/4;  // 4 vertices in each face
+                        let mut ind = raw_ind.clone().iter().map(|i| i+translucent_ind_count).collect();
+                        translucent_ind_count += vert.len() as u32;
 
                         translucent_verts.append(&mut vert.clone());
                         translucent_inds.append(&mut ind);

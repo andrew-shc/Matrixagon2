@@ -131,10 +131,13 @@ pub(crate) struct Terrain<'b> {
     chunk_mesh_ef: Option<ChunkMesh<ChunkGeneratorEF<'b>>>,
     chunk_mesh_hf: Option<ChunkMesh<ChunkGeneratorHF<'b>>>,
     chunk_mesh_mf: Option<ChunkMesh<ChunkGeneratorMF<'b>>>,
-    to_render: Vec<RenderData>,
     chunk_update_ef: bool,
     chunk_update_hf: bool,
     chunk_update_mf: bool,
+    chunk_rd_ef: Vec<(Vec<ChunkVertex>, Vec<u32>, RenderDataPurpose)>,
+    chunk_rd_hf: Vec<(Vec<ChunkVertex>, Vec<u32>, RenderDataPurpose)>,
+    chunk_rd_mf: Vec<(Vec<ChunkVertex>, Vec<u32>, RenderDataPurpose)>,
+    to_render: Vec<RenderData>,
 
     spectator_mode: bool,
 }
@@ -146,8 +149,9 @@ impl<'b> Terrain<'b> {
             block_ind,
             terrain_gen: Rc::new(TerrainGenerator::new()),
             chunk_mesh_ef: None, chunk_mesh_mf: None, chunk_mesh_hf: None,
-            to_render: vec![],
             chunk_update_ef: true, chunk_update_hf: true, chunk_update_mf: true,
+            chunk_rd_ef: vec![], chunk_rd_hf: vec![], chunk_rd_mf: vec![],
+            to_render: vec![],
             spectator_mode: false,
         }
     }
@@ -188,7 +192,7 @@ impl Component for Terrain<'static> {
 
                 let mut chunk_mesh_hf = ChunkMesh::new(
                     Length3D::origin(),
-                    ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
+                    ChunkRadius(4, 2), Some(ChunkRadius(4, 2)),
                     ChunkGeneratorHF::new(
                         self.block_ind.clone(), txtr_mapper.clone(), self.terrain_gen.clone()
                     ),
@@ -198,7 +202,7 @@ impl Component for Terrain<'static> {
 
                 let mut chunk_mesh_mf = ChunkMesh::new(
                     Length3D::origin(),
-                    ChunkRadius(2, 1), Some(ChunkRadius(2, 1)),
+                    ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
                     ChunkGeneratorMF::new(
                         self.block_ind.clone(), txtr_mapper.clone(), self.terrain_gen.clone()
                     ),
@@ -243,28 +247,31 @@ impl Component for Terrain<'static> {
 
         if self.chunk_update_ef {
             if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh_ef {
-                data_aggregator(chunk_mesh.generate_vertices());
+                self.chunk_rd_ef = chunk_mesh.generate_vertices();
                 self.chunk_update_ef = false;
                 any_chunk_update = true;
             }
         }
         if self.chunk_update_hf {
             if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh_hf {
-                data_aggregator(chunk_mesh.generate_vertices());
+                self.chunk_rd_hf = chunk_mesh.generate_vertices();
                 self.chunk_update_hf = false;
                 any_chunk_update = true;
             }
         }
         if self.chunk_update_mf {
             if let Some(ref mut chunk_mesh) = &mut self.chunk_mesh_mf {
-                println!("CHUNK UPDATE MF");
-                data_aggregator(chunk_mesh.generate_vertices());
+                self.chunk_rd_mf = chunk_mesh.generate_vertices();
                 self.chunk_update_mf = false;
                 any_chunk_update = true;
             }
         }
 
         if any_chunk_update {
+            data_aggregator(self.chunk_rd_ef.clone());
+            data_aggregator(self.chunk_rd_hf.clone());
+            data_aggregator(self.chunk_rd_mf.clone());
+
             self.to_render = render_data.iter()
                 .filter(|(verts, inds, purpose)| {
                     println!("RENDER DATA: {:?} {:?} {:?}", verts.len(), inds.len(), purpose);

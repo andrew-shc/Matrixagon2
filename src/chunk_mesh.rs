@@ -172,8 +172,12 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
                                     chunk.visible = true;
                                     chunk_changed = true;
                                 }
-                            } else {
-                                // chunk at new_chunk_pos does not exist (needs to be created)
+                            } else if !inner_chunk_update || (inner_chunk_update && !(
+                                Self::check_inside_radius::<G::B>(&self.inner_central_pos.x, &chunk_pos.x, self.chunk_inner_radius) &&
+                                Self::check_inside_radius::<G::B>(&self.inner_central_pos.y, &chunk_pos.y, self.chunk_inner_radius) &&
+                                Self::check_inside_radius::<G::B>(&self.inner_central_pos.z, &chunk_pos.z, self.chunk_inner_radius)
+                            )) {
+                                // chunk at new_chunk_pos does not exist (needs to be created) unless it is within inner chunk
 
                                 if chunk_pos.x.get::<G::A>() % 1.0 == 0.0 &&
                                     chunk_pos.y.get::<G::A>() % 2.0 == 0.0 &&
@@ -200,6 +204,12 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
                                     // chunk inside inner radius (needs to be 'removed')
                                     chunk.visible = false;
                                     chunk_changed = true;
+                                    // println!("Set chunk to INVISIBLE [{} {} {} <{}>]",
+                                    //          &chunk.pos.x.get::<G::A>(),
+                                    //          &chunk.pos.y.get::<G::A>(),
+                                    //          &chunk.pos.z.get::<G::A>(),
+                                    //          G::A::abbreviation(),
+                                    // );
                                 } else if !chunk.visible {
                                     // not visible but not inside the inner radius? (needs to be added again)
                                     // assumes all the chunks are generated since inner radius is inside the border radius
@@ -215,10 +225,10 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
             }
 
             if pos_changed {
-                println!("CHUNK NEED UPDATE: BORDER");
+                println!("CHUNK NEED UPDATE: BORDER {:?}", G::A::abbreviation());
             }
             if inner_chunk_update {
-                println!("CHUNK NEED UPDATE: INNER");
+                println!("CHUNK NEED UPDATE: INNER {:?}", G::A::abbreviation());
             }
 
             chunk_changed

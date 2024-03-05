@@ -38,6 +38,15 @@ pub(crate) fn matrix_ident() -> Mat4 {
     ]
 }
 
+
+// // must enable SIMD (SSE128/AVX256/AVX512)
+// pub(crate) fn merge_index_buffer(dst_ind: &mut Vec<u32>, src_ind: &mut Vec<u32>, offset: u32) {
+//     for i in src_ind.iter_mut() {
+//         *i += offset;
+//     }
+//     dst_ind.append(src_ind);
+// }
+
 #[derive(Clone)]
 pub struct CmdBufContext(pub(crate) Rc<Device>, pub(crate) vk::CommandPool, pub(crate) vk::Queue);
 

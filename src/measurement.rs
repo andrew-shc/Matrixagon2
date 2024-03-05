@@ -6,6 +6,7 @@ unit! {
     quantity: uom::si::length;
 
     @blox: 1.0; "bx", "block", "blocks";
+
     @chux: 32.0; "cx", "chunk", "chunks"; // extreme fidelity (basic chunk level)
     @chux_hf: 128.0; "hf", "high fidelity chunk", "high fidelity chunks";
     @chux_mf: 512.0; "mf", "medium fidelity chunk", "medium fidelity chunks";

@@ -1,0 +1,2 @@
+[build]
+rustflags = ["-O", "-C", "target-feature=+avx2"] #, "-C", "llvm-args=-force-vector-width=16"]  # for SIMD/AVX support
