@@ -3,11 +3,12 @@ pub mod chunk_gen_hf;
 pub mod chunk_gen_mf;
 pub mod mesh_util;
 pub mod terrain_gen;
+pub mod chunk_mesh;
 
 use std::rc::Rc;
 use ash::{Device, vk};
 use noise::NoiseFn;
-use crate::chunk_mesh::{ChunkGeneratable, ChunkMesh, ChunkRadius, UpdateChunk};
+use crate::component::terrain::chunk_mesh::{ChunkGeneratable, ChunkMesh, ChunkRadius, UpdateChunk};
 use crate::component::{Component, RenderData, RenderDataPurpose};
 use crate::component::camera::Length3D;
 use crate::component::terrain::chunk_gen::ChunkGeneratorEF;
@@ -200,15 +201,15 @@ impl Component for Terrain<'static> {
                 chunk_mesh_hf.update(UpdateChunk::Forced);
                 self.chunk_mesh_hf.replace(chunk_mesh_hf);
 
-                let mut chunk_mesh_mf = ChunkMesh::new(
-                    Length3D::origin(),
-                    ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
-                    ChunkGeneratorMF::new(
-                        self.block_ind.clone(), txtr_mapper.clone(), self.terrain_gen.clone()
-                    ),
-                );
-                chunk_mesh_mf.update(UpdateChunk::Forced);
-                self.chunk_mesh_mf.replace(chunk_mesh_mf);
+                // let mut chunk_mesh_mf = ChunkMesh::new(
+                //     Length3D::origin(),
+                //     ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
+                //     ChunkGeneratorMF::new(
+                //         self.block_ind.clone(), txtr_mapper.clone(), self.terrain_gen.clone()
+                //     ),
+                // );
+                // chunk_mesh_mf.update(UpdateChunk::Forced);
+                // self.chunk_mesh_mf.replace(chunk_mesh_mf);
             }
             WorldEvent::SpectatorMode(enabled) => {
                 self.spectator_mode = enabled;

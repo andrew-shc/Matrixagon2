@@ -58,31 +58,32 @@ impl CmdBufContext {
             command_buffer_count: 1,
             ..Default::default()
         };
-        let cmd_buf = self.0.allocate_command_buffers(&cmd_alloc_info)
-            .expect("Failed to allocate command buffers")
-            [0];
+        let cmd_bufs = self.0.allocate_command_buffers(&cmd_alloc_info)
+            .expect("Failed to allocate command buffers");
 
         let cmd_begin_info = vk::CommandBufferBeginInfo {
             flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
             ..Default::default()
         };
-        self.0.begin_command_buffer(cmd_buf, &cmd_begin_info)
+        self.0.begin_command_buffer(cmd_bufs[0], &cmd_begin_info)
             .expect("Failed to begin recording command buffers");
 
-        record(cmd_buf);
+        record(cmd_bufs[0]);
 
-        self.0.end_command_buffer(cmd_buf)
+        self.0.end_command_buffer(cmd_bufs[0])
             .expect("Failed to record command buffers");
 
-        let submit_info = vk::SubmitInfo::builder()
-            .command_buffers(&[cmd_buf]).build();
+        let submit_infos = [
+            vk::SubmitInfo::builder()
+                .command_buffers(&cmd_bufs).build()
+        ];
 
-        self.0.queue_submit(self.2, &[submit_info], vk::Fence::null())
+        self.0.queue_submit(self.2, &submit_infos, vk::Fence::null())
             .expect("Failed to submit draw command buffer to graphics queue");
 
         self.0.queue_wait_idle(self.2).unwrap();
 
-        self.0.free_command_buffers(self.1, &[cmd_buf])
+        self.0.free_command_buffers(self.1, &cmd_bufs)
     }
 }
 

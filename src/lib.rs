@@ -49,7 +49,6 @@ mod shader;
 mod world;
 pub mod component;
 mod util;
-pub mod chunk_mesh;
 mod measurement;
 mod swapchain;
 mod framebuffer;

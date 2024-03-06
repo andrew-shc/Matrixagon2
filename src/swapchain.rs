@@ -11,7 +11,7 @@ pub(crate) struct SwapchainManager {
     device: Rc<Device>,
 
     pub(crate) loader: Swapchain,
-    pub(crate) swapchain: vk::SwapchainKHR,
+    pub(crate) swapchain: [vk::SwapchainKHR; 1],
     pub(crate) extent: vk::Extent2D,
     pub(crate) capb: vk::SurfaceCapabilitiesKHR,
     pub(crate) fmt: vk::SurfaceFormatKHR,
@@ -59,14 +59,16 @@ impl SwapchainManager {
             ..Default::default()
         };
 
-        let swapchain = swapchain_loader.create_swapchain(&swapchain_create_info, None)
-            .expect("Failed to create swapchain");
+        let swapchain = [
+            swapchain_loader.create_swapchain(&swapchain_create_info, None)
+                .expect("Failed to create swapchain")
+        ];
 
         if dbv.vk_swapchain_output {
             println!("Swapchain Object: {:?}", swapchain);
         }
 
-        let swapchain_images = swapchain_loader.get_swapchain_images(swapchain)
+        let swapchain_images = swapchain_loader.get_swapchain_images(swapchain[0])
             .expect("Failed to get swapchain images");
 
         let fbm = FramebufferManager::new_swapchain_bounded(
@@ -103,18 +105,20 @@ impl SwapchainManager {
             composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
             present_mode: prsnt,
             clipped: vk::TRUE,
-            old_swapchain: self.swapchain,
+            old_swapchain: self.swapchain[0],
             ..Default::default()
         };
 
-        let swapchain = self.loader.create_swapchain(&swapchain_create_info, None)
-            .expect("Failed to create swapchain");
+        let swapchain = [
+            self.loader.create_swapchain(&swapchain_create_info, None)
+                .expect("Failed to create swapchain")
+        ];
 
         if self.dbv.vk_swapchain_output {
             println!("Swapchain Object: {:?}", swapchain);
         }
 
-        let swapchain_images = self.loader.get_swapchain_images(swapchain)
+        let swapchain_images = self.loader.get_swapchain_images(swapchain[0])
             .expect("Failed to get swapchain images");
 
         let fbm = FramebufferManager::new_swapchain_bounded(
@@ -132,7 +136,7 @@ impl SwapchainManager {
     pub(crate) unsafe fn destroy(&self) {
         self.fbm.destroy();
 
-        self.loader.destroy_swapchain(self.swapchain, None);
+        self.loader.destroy_swapchain(self.swapchain[0], None);
     }
 }
 

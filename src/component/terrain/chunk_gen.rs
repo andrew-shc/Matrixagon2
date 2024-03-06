@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use noise::{NoiseFn};
 use uom::si::f32::Length;
-use crate::chunk_mesh::{Chunk, Position, ChunkGeneratable};
 use crate::component::camera::Length3D;
 use crate::component::RenderDataPurpose;
 use crate::component::terrain::{BlockData, FaceDir};
+use crate::component::terrain::chunk_mesh::{Chunk, ChunkGeneratable, Position};
 use crate::component::terrain::mesh_util::{ChunkMeshUtil};
 use crate::component::terrain::terrain_gen::TerrainGenerator;
 use crate::component::texture::TextureIDMapper;
@@ -16,8 +16,6 @@ pub(super) struct ChunkGeneratorEF<'b> {
     chunk_size: u32,
     block_ind: Vec<BlockData<'b>>,
     txtr_id_mapper: TextureIDMapper,
-    // noise: Perlin,
-    // floral_noise: Perlin,
     terrain_gen: Rc<TerrainGenerator>,
 }
 
@@ -25,7 +23,6 @@ impl<'b> ChunkGeneratorEF<'b> {
     pub(super) fn new(block_ind: Vec<BlockData<'b>>, txtr_id_mapper: TextureIDMapper, terrain_gen: Rc<TerrainGenerator>) -> Self {
         Self {
             chunk_size: Length::new::<<Self as ChunkGeneratable>::B>(1.0).get::<blox>() as u32, block_ind, txtr_id_mapper,
-            // noise: Perlin::new(50), floral_noise: Perlin::new(23),
             terrain_gen,
         }
     }

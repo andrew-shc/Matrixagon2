@@ -5,6 +5,7 @@ use std::rc::Rc;
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
 use ash::{Device, Instance, vk};
+use ash::vk::DeviceQueueCreateFlags;
 use ash_window::create_surface;
 use winit::event_loop::EventLoop;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
@@ -24,9 +25,9 @@ const VALIDATION_LYRS: &[*const c_char] = &[
 ];
 
 struct SyncMTXG {
-    image_available_smph: vk::Semaphore,
-    render_finished_smph: vk::Semaphore,
-    in_flight_fence: vk::Fence,
+    image_available_smph: [vk::Semaphore; 1],
+    render_finished_smph: [vk::Semaphore; 1],
+    in_flight_fence: [vk::Fence; 1],
 }
 
 pub struct VulkanHandler {
@@ -43,7 +44,7 @@ pub struct VulkanHandler {
     cmd_pool: vk::CommandPool,
     transient_cmd_pool: vk::CommandPool,
 
-    render_cmd_buf: vk::CommandBuffer,
+    render_cmd_buf: [vk::CommandBuffer; 1],
     sync: SyncMTXG,
 
     shader: Option<Box<dyn Shader>>,
@@ -145,12 +146,11 @@ impl VulkanHandler {
             // CREATING GRAPHICS AND PRESENTATION QUEUES
 
             let queue_fam_ind = find_queue_families(debug_output, &vi).unwrap();
-            let gfxs_queue_create_info = vk::DeviceQueueCreateInfo {
-                queue_family_index: queue_fam_ind,
-                queue_count: 1,
-                p_queue_priorities: &1.0,
-                ..Default::default()
-            };
+            let priorities = [1.0];
+            let gfxs_queue_create_info = vk::DeviceQueueCreateInfo::builder()
+                .queue_family_index(queue_fam_ind)
+                .queue_priorities(&priorities)
+                .build();
 
             // since our presentation queue will be the same as the graphics queue
             // let prsnt_queue_create_info = vk::DeviceQueueCreateInfo {
@@ -167,8 +167,9 @@ impl VulkanHandler {
                 ..Default::default()
             };
 
+            let queues = [gfxs_queue_create_info/*, prsnt_queue_create_info*/ ];
             let device_create_info = vk::DeviceCreateInfo::builder()
-                .queue_create_infos(&[gfxs_queue_create_info, /*prsnt_queue_create_info*/ ])
+                .queue_create_infos(&queues)
                 .enabled_features(&phys_devc_feats)
                 .enabled_extension_names(&DEVICE_EXTS)
                 .build();
@@ -198,8 +199,8 @@ impl VulkanHandler {
                 queue_family_index: ind,
                 ..Default::default()
             };
-            transient_cmd_pool = device.create_command_pool(&cmd_pool_info, None)
-                .expect("Failed to create command pool");
+            transient_cmd_pool = device.create_command_pool(&transient_cmd_pool_info, None)
+                .expect("Failed to create transient command pool");
 
             let cmd_alloc_info = vk::CommandBufferAllocateInfo {
                 command_pool: cmd_pool,
@@ -224,9 +225,9 @@ impl VulkanHandler {
                 .expect("Failed to create in flight fence");
 
             sync = SyncMTXG {
-                image_available_smph,
-                render_finished_smph,
-                in_flight_fence
+                image_available_smph: [image_available_smph],
+                render_finished_smph: [render_finished_smph],
+                in_flight_fence: [in_flight_fence],
             }
         }
 
@@ -234,7 +235,7 @@ impl VulkanHandler {
             debug_output, validate, debug_loader, debug,
             vi: vi.clone(), device, gfxs_queue, prsnt_queue,
             swapchain: None, cmd_pool, transient_cmd_pool,
-            render_cmd_buf: render_cmd_buf[0], sync, shader: None,
+            render_cmd_buf: [render_cmd_buf[0]], sync, shader: None,
         }
     }
 
@@ -259,10 +260,10 @@ impl VulkanHandler {
         let swapchain = self.swapchain.as_mut()
             .expect("Attempted to draw frame when swapchain has not initialized yet!");
 
-        self.device.wait_for_fences(&[self.sync.in_flight_fence], true, u64::MAX).unwrap();
+        self.device.wait_for_fences(&self.sync.in_flight_fence, true, u64::MAX).unwrap();
 
-        let acquisition = swapchain.loader.acquire_next_image(swapchain.swapchain, u64::MAX, self.sync.image_available_smph, vk::Fence::null());
-        match acquisition {
+        let acquisition = swapchain.loader.acquire_next_image(swapchain.swapchain[0], u64::MAX, self.sync.image_available_smph[0], vk::Fence::null());
+        let img_inds = match acquisition {
             // swapchain suboptimal
             Ok((_, true)) => {
                 // self.recreate_swapchain();
@@ -277,41 +278,46 @@ impl VulkanHandler {
             Err(e) => {
                 panic!("{}", e);
             }
-            _ => {}
-        }
+            Ok((ind, false)) => {
+                [ind]
+            }
+        };
 
-        self.device.reset_fences(&[self.sync.in_flight_fence]).unwrap();
-        let (img_ind, _) = acquisition.unwrap();
+        self.device.reset_fences(&self.sync.in_flight_fence).unwrap();
 
-        self.device.reset_command_buffer(self.render_cmd_buf, vk::CommandBufferResetFlags::empty()).unwrap();
+        self.device.reset_command_buffer(self.render_cmd_buf[0], vk::CommandBufferResetFlags::empty()).unwrap();
 
         // COMMAND RECORDING
 
         let cmd_begin_info = vk::CommandBufferBeginInfo {
             ..Default::default()
         };
-        self.device.begin_command_buffer(self.render_cmd_buf, &cmd_begin_info)
+        self.device.begin_command_buffer(self.render_cmd_buf[0], &cmd_begin_info)
             .expect("Failed to begin recording command buffers");
 
         self.shader.as_ref().unwrap()
-            .draw_command(self.render_cmd_buf, swapchain.fbm.framebuffers[img_ind as usize]);
+            .draw_command(self.render_cmd_buf[0], swapchain.fbm.framebuffers[img_inds[0] as usize]);
 
-        self.device.end_command_buffer(self.render_cmd_buf)
+        self.device.end_command_buffer(self.render_cmd_buf[0])
             .expect("Failed to record command buffers");
 
-        let submit_info = vk::SubmitInfo::builder()
-            .wait_semaphores(&[self.sync.image_available_smph])
-            .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
-            .command_buffers(&[self.render_cmd_buf])
-            .signal_semaphores(&[self.sync.render_finished_smph]).build();
+        let dst_stage_masks = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let submit_infos = [
+            vk::SubmitInfo::builder()
+                .wait_semaphores(&self.sync.image_available_smph)
+                .wait_dst_stage_mask(&dst_stage_masks)
+                .command_buffers(&self.render_cmd_buf)
+                .signal_semaphores(&self.sync.render_finished_smph)
+                .build()
+        ];
 
-        self.device.queue_submit(self.gfxs_queue, &[submit_info], self.sync.in_flight_fence)
+        self.device.queue_submit(self.gfxs_queue, &submit_infos, self.sync.in_flight_fence[0])
             .expect("Failed to submit draw command buffer to graphics queue");
 
         let prsnt_info = vk::PresentInfoKHR::builder()
-            .wait_semaphores(&[self.sync.render_finished_smph])
-            .swapchains(&[swapchain.swapchain])
-            .image_indices(&[img_ind]).build();
+            .wait_semaphores(&self.sync.render_finished_smph)
+            .swapchains(&swapchain.swapchain)
+            .image_indices(&img_inds).build();
         let swapchain_result = swapchain.loader.queue_present(self.prsnt_queue, &prsnt_info);
         match swapchain_result {
             // swapchain suboptimal
@@ -335,9 +341,9 @@ impl VulkanHandler {
             swapchain.destroy();
         }
 
-        self.device.destroy_semaphore(self.sync.image_available_smph, None);
-        self.device.destroy_semaphore(self.sync.render_finished_smph, None);
-        self.device.destroy_fence(self.sync.in_flight_fence, None);
+        self.device.destroy_semaphore(self.sync.image_available_smph[0], None);
+        self.device.destroy_semaphore(self.sync.render_finished_smph[0], None);
+        self.device.destroy_fence(self.sync.in_flight_fence[0], None);
 
         self.device.destroy_command_pool(self.transient_cmd_pool, None);
         self.device.destroy_command_pool(self.cmd_pool, None);

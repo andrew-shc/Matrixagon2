@@ -355,7 +355,7 @@ impl EguiHandler {
     unsafe fn transfer_img_barrier(&self, cmd_buf: vk::CommandBuffer, ui_txtr: &UITextureDescriptor) {
         // transition image layout to prepare for transfer
 
-        let transfer_barrier = vk::ImageMemoryBarrier {
+        let transfer_barriers = [vk::ImageMemoryBarrier {
             old_layout: vk::ImageLayout::UNDEFINED,
             new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
@@ -371,15 +371,15 @@ impl EguiHandler {
             src_access_mask: vk::AccessFlags::empty(),
             dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
             ..Default::default()
-        };
+        }];
         self.device.cmd_pipeline_barrier(
             cmd_buf, vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::TRANSFER,
-            vk::DependencyFlags::empty(), &[], &[], &[transfer_barrier]
+            vk::DependencyFlags::empty(), &[], &[], &transfer_barriers
         );
 
         // copy buffer to image
 
-        let region = vk::BufferImageCopy {
+        let regions = [vk::BufferImageCopy {
             buffer_offset: 0,
             buffer_row_length: 0,
             buffer_image_height: 0,
@@ -391,14 +391,14 @@ impl EguiHandler {
             },
             image_offset: vk::Offset3D {x:0, y:0, z:0},
             image_extent: ui_txtr.extent,
-        };
+        }];
         self.device.cmd_copy_buffer_to_image(
-            cmd_buf, ui_txtr.host_buf, ui_txtr.local_img, vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[region]
+            cmd_buf, ui_txtr.host_buf, ui_txtr.local_img, vk::ImageLayout::TRANSFER_DST_OPTIMAL, &regions
         );
 
         // transition image layout from transfer to be read by shaders
 
-        let shader_barrier = vk::ImageMemoryBarrier {
+        let shader_barriers = [vk::ImageMemoryBarrier {
             old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
@@ -414,10 +414,10 @@ impl EguiHandler {
             src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
             dst_access_mask: vk::AccessFlags::SHADER_READ,
             ..Default::default()
-        };
+        }];
         self.device.cmd_pipeline_barrier(
             cmd_buf, vk::PipelineStageFlags::TRANSFER, vk::PipelineStageFlags::FRAGMENT_SHADER,
-            vk::DependencyFlags::empty(), &[], &[], &[shader_barrier]
+            vk::DependencyFlags::empty(), &[], &[], &shader_barriers
         );
     }
 

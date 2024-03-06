@@ -1,10 +1,11 @@
 use std::mem;
 use std::rc::Rc;
 use ash::{Device, vk};
+use ash::vk::{AccessFlags, ImageLayout, PipelineStageFlags, SUBPASS_EXTERNAL};
 use crate::component::{RenderData, RenderDataPurpose};
 use crate::framebuffer::FBAttachmentRef;
-use crate::{get_vertex_inp};
-use crate::shader::{DescriptorManager, destroy_shader_modules, disabled_cba, gen_shader_modules_info, Shader, standard_graphics_pipeline, StandardGraphicsPipelineInfo, transparent_cba};
+use crate::{vertex_input};
+use crate::shader::{ColorBlendKind, DescriptorManager, Shader, standard_graphics_pipeline, StandardGraphicsPipelineInfo, VBOFS};
 use crate::shader::debug_ui::DebugUISubShader;
 
 #[derive(Copy, Clone, Debug)]
@@ -13,22 +14,28 @@ pub struct ChunkVertex {
     pub(crate) uv: [f32; 2],
     pub(crate) txtr: f32,
 }
+vertex_input!(ChunkVertex;
+    (vk::Format::R32G32B32_SFLOAT, pos),
+    (vk::Format::R32G32_SFLOAT, uv),
+    (vk::Format::R32_SFLOAT, txtr)
+);
 
 
 pub struct ChunkRasterizer {
     device: Rc<Device>,
     extent: vk::Extent2D,
     renderpass: vk::RenderPass,
+    clear_values: Vec<vk::ClearValue>,
 
     gfxs_pipeline: vk::Pipeline,
     transparent_gfxs_pipeline: vk::Pipeline,
     translucent_fluid_gfxs_pipeline: vk::Pipeline,
 
-    terrain_vbo: Option<(vk::Buffer, vk::DeviceMemory)>,
+    terrain_vbo: Option<([vk::Buffer; 1], vk::DeviceMemory)>,
     terrain_ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
-    transparent_vbo: Option<(vk::Buffer, vk::DeviceMemory)>,
+    transparent_vbo: Option<([vk::Buffer; 1], vk::DeviceMemory)>,
     transparent_ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
-    translucent_fluid_vbo: Option<(vk::Buffer, vk::DeviceMemory)>,
+    translucent_fluid_vbo: Option<([vk::Buffer; 1], vk::DeviceMemory)>,
     translucent_fluid_ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
 
     descriptor: DescriptorManager,
@@ -52,32 +59,6 @@ impl ChunkRasterizer {
                 (vk::DescriptorType::UNIFORM_BUFFER, vk::ShaderStageFlags::VERTEX)  // time
             ]
         ]);
-
-        // GRAPHICS PIPELINE
-
-        let (shader_stages, shader_modules) = gen_shader_modules_info(
-            device.clone(), vec![
-                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.vert", vk::ShaderStageFlags::VERTEX),
-                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.frag", vk::ShaderStageFlags::FRAGMENT),
-            ]);
-
-        let (transparent_shader_stages, transparent_shader_modules) = gen_shader_modules_info(
-            device.clone(), vec![
-                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.vert", vk::ShaderStageFlags::VERTEX),
-                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_transparent.frag", vk::ShaderStageFlags::FRAGMENT),
-            ]);
-
-        let (translucent_fluid_shader_stages, translucent_fluid_shader_modules) = gen_shader_modules_info(
-            device.clone(), vec![
-                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_fluid.vert", vk::ShaderStageFlags::VERTEX),
-                ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_translucent.frag", vk::ShaderStageFlags::FRAGMENT),
-            ]);
-
-        let vertex_input_state = get_vertex_inp!(ChunkVertex;
-            (vk::Format::R32G32B32_SFLOAT, pos),
-            (vk::Format::R32G32_SFLOAT, uv),
-            (vk::Format::R32_SFLOAT, txtr)
-        );
 
         // SUBPASS & ATTACHMENTS
 
@@ -114,108 +95,211 @@ impl ChunkRasterizer {
             .src_mask(COLOR_ATTACHMENT_OUTPUT(WRITE) | EARLY_FRAGMENT_TEST(WRITE))
             .src_mask(COLOR_ATTACHMENT_OUTPUT(WRITE) | EARLY_FRAGMENT_TEST(WRITE))
          */
+        /*
+        renderpass!(
+            device;
+            attachments: {
+                presentation: {
+                    format: color_fmt
+                    samples: TYPE_1
+                    load: CLEAR
+                    store: STORE
+                    // ignore stencil ops by omitting
+                    initial: UNDEFINED
+                    final: PRESENT_SRC_KHR
+                }
+                depth: {
+                    format: depth_fmt
+                    samples: TYPE_1
+                    load: CLEAR
+                    store: STORE
+                }
+            }
+            subpasses: {
+                block: {
+                    input: presentation@GENERAL
+                    color: presentation@GENERAL, presentation@COLOR_OPTIMAL
+                    resolve:
+                    preserve:
+                    depth: depth@DEPTH_ATTACHMENT
+                }
+            }
+            dependencies: {
+                SUBPASS_EXTERNAL->1 {
+                    src_stage:  S::COLOR_ATTACHMENT_OUTPUT | S::EARLY_FRAGMENT_TESTS
+                    dst_stage:  S::COLOR_ATTACHMENT_OUTPUT | S::EARLY_FRAGMENT_TESTS
+                    src_access:
+                    dst_access: A::COLOR_ATTACHMENT_WRITE | A::DEPTH_STENCIL_ATTACHMENT_WRITE
+                }
+                0->1 {
+                    src_stage:  S::COLOR_ATTACHMENT_OUTPUT | S::EARLY_FRAGMENT_TESTS
+                    dst_stage:  S::COLOR_ATTACHMENT_OUTPUT | S::EARLY_FRAGMENT_TESTS
+                    src_access: COLOR_ATTACHMENT_WRITE
+                    dst_access: A::COLOR_ATTACHMENT_WRITE | A::DEPTH_STENCIL_ATTACHMENT_WRITE
+                }
+            }
+        )
+         */
+
+        // let renderpass = create_renderpass(
+        //     device.clone(),
+        //     vec![
+        //         AttachmentKind::presentation(color_format),
+        //         AttachmentKind::depth(depth_format)
+        //     ],
+        //     vec![
+        //         graphics_subpass(  // block subpass
+        //             vec![],
+        //             vec![(0, ImageLayout::COLOR_ATTACHMENT_OPTIMAL)],
+        //             vec![],
+        //             vec![],
+        //             Some(1)
+        //         ).build(),
+        //         graphics_subpass(  // composition subpass
+        //             vec![(0, ImageLayout::GENERAL)],
+        //             vec![(0, ImageLayout::GENERAL)],
+        //             vec![],
+        //             vec![],
+        //             Some(1)
+        //         ).build(),
+        //     ],
+        //     vec![
+        //         // block subpass dependency
+        //         vk::SubpassDependency::builder()
+        //             .src_subpass(SUBPASS_EXTERNAL).dst_subpass(0)
+        //             .src_stage_mask(    S::COLOR_ATTACHMENT_OUTPUT | S::EARLY_FRAGMENT_TESTS          )
+        //             .dst_stage_mask(    S::COLOR_ATTACHMENT_OUTPUT | S::EARLY_FRAGMENT_TESTS          )
+        //             .src_access_mask(   A::empty()                                                    )
+        //             .dst_access_mask(   A::COLOR_ATTACHMENT_WRITE | A::DEPTH_STENCIL_ATTACHMENT_WRITE ),
+        //         // composition subpass dependency
+        //         vk::SubpassDependency::builder()
+        //             .src_subpass(0).dst_subpass(1)
+        //             .src_stage_mask(    S::COLOR_ATTACHMENT_OUTPUT )
+        //             .dst_stage_mask(    S::FRAGMENT_SHADER         )
+        //             .src_access_mask(   A::COLOR_ATTACHMENT_WRITE  )
+        //             .dst_access_mask(   A::INPUT_ATTACHMENT_READ   ),
+        //     ]
+        // );
+
+        let attachments = vec![
+            vk::AttachmentDescription {  // presentation attachment
+                format: color_format,
+                samples: vk::SampleCountFlags::TYPE_1,  // multi sampling
+                load_op: vk::AttachmentLoadOp::CLEAR, store_op: vk::AttachmentStoreOp::STORE,
+                stencil_load_op: vk::AttachmentLoadOp::DONT_CARE, stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,  // ignore
+                initial_layout: vk::ImageLayout::UNDEFINED,  // dependent on previous renderpass
+                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,  // dependent on type
+                ..Default::default()
+            },
+            vk::AttachmentDescription {  // depth attachment
+                format: depth_format,
+                samples: vk::SampleCountFlags::TYPE_1,  // multi sampling
+                load_op: vk::AttachmentLoadOp::CLEAR, store_op: vk::AttachmentStoreOp::DONT_CARE,
+                stencil_load_op: vk::AttachmentLoadOp::DONT_CARE, stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,  // ignore
+                initial_layout: vk::ImageLayout::UNDEFINED,  // dependent on previous renderpass
+                final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,  // dependent on type
+                ..Default::default()
+            }
+        ];
+
+        let subpasses = vec![
+            // block subpass
+            vk::SubpassDescription::builder()
+                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+                .color_attachments(&[
+                    vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL }
+                ]).depth_stencil_attachment(
+                &vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL }
+            ).build(),
+            // composition subpass
+            vk::SubpassDescription::builder()
+                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+                .input_attachments(&[
+                    vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::GENERAL }
+                ]).color_attachments(&[
+                vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::GENERAL }
+            ]).build(),
+        ];
+
+        let dependencies = vec![
+            // block subpass dependency
+            vk::SubpassDependency {
+                src_subpass: vk::SUBPASS_EXTERNAL, dst_subpass: 0,
+                src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+                dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+                src_access_mask: vk::AccessFlags::empty(),
+                dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                ..Default::default()
+            },
+            // composition subpass dependency
+            vk::SubpassDependency {
+                src_subpass: 0, dst_subpass: 1,
+                src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                dst_stage_mask: vk::PipelineStageFlags::FRAGMENT_SHADER,
+                src_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                dst_access_mask: vk::AccessFlags::INPUT_ATTACHMENT_READ,
+                ..Default::default()
+            },
+        ];
 
         let renderpass_info = vk::RenderPassCreateInfo::builder()
-            .attachments(&[
-                vk::AttachmentDescription {  // presentation attachment
-                    format: color_format,
-                    samples: vk::SampleCountFlags::TYPE_1,  // multi sampling
-                    load_op: vk::AttachmentLoadOp::CLEAR, store_op: vk::AttachmentStoreOp::STORE,
-                    stencil_load_op: vk::AttachmentLoadOp::DONT_CARE, stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,  // ignore
-                    initial_layout: vk::ImageLayout::UNDEFINED,  // dependent on previous renderpass
-                    final_layout: vk::ImageLayout::PRESENT_SRC_KHR,  // dependent on type
-                    ..Default::default()
-                },
-                vk::AttachmentDescription {  // depth attachment
-                    format: depth_format,
-                    samples: vk::SampleCountFlags::TYPE_1,  // multi sampling
-                    load_op: vk::AttachmentLoadOp::CLEAR, store_op: vk::AttachmentStoreOp::DONT_CARE,
-                    stencil_load_op: vk::AttachmentLoadOp::DONT_CARE, stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,  // ignore
-                    initial_layout: vk::ImageLayout::UNDEFINED,  // dependent on previous renderpass
-                    final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,  // dependent on type
-                    ..Default::default()
-                }
-            ])
-            .subpasses(&[
-                // block subpass
-                vk::SubpassDescription::builder()
-                    .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                    .color_attachments(&[
-                        vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL }
-                    ]).depth_stencil_attachment(
-                        &vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL }
-                    ).build(),
-                // composition subpass
-                vk::SubpassDescription::builder()
-                    .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                    .input_attachments(&[
-                        vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::GENERAL }
-                    ]).color_attachments(&[
-                        vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::GENERAL }
-                    ]).build(),
-            ])
-            .dependencies(&[
-                // block subpass dependency
-                vk::SubpassDependency {
-                    src_subpass: vk::SUBPASS_EXTERNAL, dst_subpass: 0,
-                    src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-                    dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-                    src_access_mask: vk::AccessFlags::empty(),
-                    dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-                    ..Default::default()
-                },
-                // composition subpass dependency
-                vk::SubpassDependency {
-                    src_subpass: 0, dst_subpass: 1,
-                    src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                    dst_stage_mask: vk::PipelineStageFlags::FRAGMENT_SHADER,
-                    src_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                    dst_access_mask: vk::AccessFlags::INPUT_ATTACHMENT_READ,
-                    ..Default::default()
-                },
-            ])
+            .attachments(&attachments)
+            .subpasses(&subpasses)
+            .dependencies(&dependencies)
             .build();
         let renderpass = device.create_render_pass(&renderpass_info, None).unwrap();
 
-        // PIPELINE CREATION
+        // GRAPHICS PIPELINE
 
         let graphics_pipelines = standard_graphics_pipeline(
             device.clone(),
             vec![
-                StandardGraphicsPipelineInfo {
-                    shader_stages, vertex_input_state,
+                StandardGraphicsPipelineInfo {  // opaque pipeline
+                    shaders: vec![
+                        ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.vert", vk::ShaderStageFlags::VERTEX),
+                        ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.frag", vk::ShaderStageFlags::FRAGMENT),
+                    ],
+                    vertex_input_state: ChunkVertex::VERTEX_INPUT_STATE,
                     back_face_culling: true, depth_testing: true,
-                    color_blend_attachment_state: vec![disabled_cba()],
+                    color_blend_attachment_state: vec![ColorBlendKind::disabled()],
                     subpass_index: 0,
                 },
-                StandardGraphicsPipelineInfo {
-                    shader_stages: transparent_shader_stages, vertex_input_state,
+                StandardGraphicsPipelineInfo {  // transparent pipeline
+                    shaders: vec![
+                        ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk.vert", vk::ShaderStageFlags::VERTEX),
+                        ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_transparent.frag", vk::ShaderStageFlags::FRAGMENT),
+                    ],
+                    vertex_input_state: ChunkVertex::VERTEX_INPUT_STATE,
                     back_face_culling: false, depth_testing: true,
-                    color_blend_attachment_state: vec![transparent_cba()],
+                    color_blend_attachment_state: vec![ColorBlendKind::transparent()],
                     subpass_index: 0,
                 },
-                StandardGraphicsPipelineInfo {
-                    shader_stages: translucent_fluid_shader_stages, vertex_input_state,
+                StandardGraphicsPipelineInfo {  // translucent pipeline
+                    shaders: vec![
+                        ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_fluid.vert", vk::ShaderStageFlags::VERTEX),
+                        ("C:/Users/andrewshen/documents/matrixagon2/src/shader/chunk_translucent.frag", vk::ShaderStageFlags::FRAGMENT),
+                    ],
+                    vertex_input_state: ChunkVertex::VERTEX_INPUT_STATE,
                     back_face_culling: false, depth_testing: true,
-                    color_blend_attachment_state: vec![transparent_cba()],
+                    color_blend_attachment_state: vec![ColorBlendKind::transparent()],
                     subpass_index: 0,
                 },
             ],
             descriptor.pipeline_layout, renderpass,
         );
 
-        destroy_shader_modules(device.clone(), shader_modules);
-        destroy_shader_modules(device.clone(), transparent_shader_modules);
-        destroy_shader_modules(device.clone(), translucent_fluid_shader_modules);
-
         Self {
             // transparency_sub_shader: ChunkTransparencyRasterizerSubShader::new(),
             // TODO: DEBUG UI SENSITIVE
-            debug_ui_sub_shader: DebugUISubShader::new(device.clone(), extent, descriptor.pipeline_layout, renderpass),
+            debug_ui_sub_shader: DebugUISubShader::new(device.clone(), descriptor.pipeline_layout, renderpass),
 
             device: device.clone(),
             extent,
             renderpass,
+            clear_values: vec![
+                vk::ClearValue { color: vk::ClearColorValue {float32: [0.2, 0.3, 0.9, 1.0]} },
+                vk::ClearValue { color: vk::ClearColorValue {float32: [0.0, 0.0, 0.0, 0.0]} },
+            ],
             gfxs_pipeline: graphics_pipelines[0],
             transparent_gfxs_pipeline: graphics_pipelines[1],
             translucent_fluid_gfxs_pipeline: graphics_pipelines[2],
@@ -264,7 +348,6 @@ impl Shader for ChunkRasterizer {
 
     fn update_extent(&mut self, new_extent: vk::Extent2D) {
         self.extent = new_extent;
-        self.debug_ui_sub_shader.update_extent(new_extent);
     }
 
     fn recreate_buffer(&mut self, render_data: RenderData) {
@@ -273,10 +356,10 @@ impl Shader for ChunkRasterizer {
                 println!("RECREATE [OPAQUE/DEFAULT] VERTEX BUFFER");
                 if let Some((old_buf, old_mem)) = self.terrain_vbo {
                     self.device.device_wait_idle().unwrap();
-                    self.device.destroy_buffer(old_buf, None);
+                    self.device.destroy_buffer(old_buf[0], None);
                     self.device.free_memory(old_mem, None);
                 }
-                self.terrain_vbo = Some((buf, mem));
+                self.terrain_vbo = Some(([buf], mem));
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainOpaque) => unsafe {
                 println!("RECREATE [OPAQUE/DEFAULT] INDEX BUFFER");
@@ -291,10 +374,10 @@ impl Shader for ChunkRasterizer {
                 println!("RECREATE [TRANSPARENT] VERTEX BUFFER");
                 if let Some((old_buf, old_mem)) = self.transparent_vbo {
                     self.device.device_wait_idle().unwrap();
-                    self.device.destroy_buffer(old_buf, None);
+                    self.device.destroy_buffer(old_buf[0], None);
                     self.device.free_memory(old_mem, None);
                 }
-                self.transparent_vbo = Some((buf, mem));
+                self.transparent_vbo = Some(([buf], mem));
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainTransparent) => unsafe {
                 println!("RECREATE [TRANSPARENT] INDEX BUFFER");
@@ -309,10 +392,10 @@ impl Shader for ChunkRasterizer {
                 println!("RECREATE [TRANSLUCENT] VERTEX BUFFER");
                 if let Some((old_buf, old_mem)) = self.translucent_fluid_vbo {
                     self.device.device_wait_idle().unwrap();
-                    self.device.destroy_buffer(old_buf, None);
+                    self.device.destroy_buffer(old_buf[0], None);
                     self.device.free_memory(old_mem, None);
                 }
-                self.translucent_fluid_vbo = Some((buf, mem));
+                self.translucent_fluid_vbo = Some(([buf], mem));
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainTranslucent) => unsafe {
                 println!("RECREATE [TRANSLUCENT] INDEX BUFFER");
@@ -328,10 +411,10 @@ impl Shader for ChunkRasterizer {
                 // println!("RECREATE [DEBUG UI] VERTEX BUFFER");
                 if let Some((old_buf, old_mem)) = self.debug_ui_sub_shader.ui_vbo {
                     self.device.device_wait_idle().unwrap();
-                    self.device.destroy_buffer(old_buf, None);
+                    self.device.destroy_buffer(old_buf[0], None);
                     self.device.free_memory(old_mem, None);
                 }
-                self.debug_ui_sub_shader.ui_vbo = Some((buf, mem));
+                self.debug_ui_sub_shader.ui_vbo = Some(([buf], mem));
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::DebugUI) => unsafe {
                 // println!("RECREATE [DEBUG UI] INDEX BUFFER");
@@ -354,26 +437,22 @@ impl Shader for ChunkRasterizer {
             .render_pass(self.renderpass)
             .framebuffer(framebuffer)
             .render_area(vk::Rect2D { offset: vk::Offset2D {x:0, y:0}, extent: self.extent})
-            .clear_values(&[
-                // TODO: DEBUG UI SENSITIVE
-                vk::ClearValue { color: vk::ClearColorValue {float32: [0.2, 0.3, 0.9, 1.0]} },
-                vk::ClearValue { color: vk::ClearColorValue {float32: [0.0, 0.0, 0.0, 0.0]} },
-            ])
+            .clear_values(&self.clear_values)
             .build();
 
         self.device.cmd_begin_render_pass(cmd_buf, &renderpass_info, vk::SubpassContents::INLINE);
 
-        let viewport = vk::Viewport {
+        let viewports = [vk::Viewport {
             x: 0.0,
             y: 0.0,
             width: self.extent.width as f32,
             height: self.extent.height as f32,
             min_depth: 0.0,
             max_depth: 1.0,
-        };
-        let scissor = vk::Rect2D { offset: vk::Offset2D {x:0,y:0}, extent: self.extent };
-        self.device.cmd_set_viewport(cmd_buf, 0, &[viewport]);
-        self.device.cmd_set_scissor(cmd_buf, 0, &[scissor]);
+        }];
+        let scissors = [vk::Rect2D { offset: vk::Offset2D {x:0,y:0}, extent: self.extent }];
+        self.device.cmd_set_viewport(cmd_buf, 0, &viewports);
+        self.device.cmd_set_scissor(cmd_buf, 0, &scissors);
 
         self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.descriptor.pipeline_layout(),
                                              0, &self.descriptor.descriptor_sets(&[0, 1, 2]), &[]);
@@ -381,26 +460,26 @@ impl Shader for ChunkRasterizer {
         if let (Some((terrain_vbo, _)), Some(terrain_ibo)) = (self.terrain_vbo, self.terrain_ibo) {
             // opaque objects
             self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.gfxs_pipeline);
-            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[terrain_vbo], &[0]);
+            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &terrain_vbo, &VBOFS);
             self.device.cmd_bind_index_buffer(cmd_buf, terrain_ibo.0, 0, vk::IndexType::UINT32);
             self.device.cmd_draw_indexed(cmd_buf, terrain_ibo.2, 1, 0, 0, 0);
         }
         if let (Some((transparent_vbo, _)), Some(transparent_ibo)) = (self.transparent_vbo, self.transparent_ibo) {
             // transparent objects
             self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.transparent_gfxs_pipeline);
-            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[transparent_vbo], &[0]);
+            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &transparent_vbo, &VBOFS);
             self.device.cmd_bind_index_buffer(cmd_buf, transparent_ibo.0, 0, vk::IndexType::UINT32);
             self.device.cmd_draw_indexed(cmd_buf, transparent_ibo.2, 1, 0, 0, 0);
         }
         if let (Some((translucent_fluid_vbo, _)), Some(translucent_fluid_ibo)) = (self.translucent_fluid_vbo, self.translucent_fluid_ibo) {
             // translucent objects
             self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.translucent_fluid_gfxs_pipeline);
-            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &[translucent_fluid_vbo], &[0]);
+            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &translucent_fluid_vbo, &VBOFS);
             self.device.cmd_bind_index_buffer(cmd_buf, translucent_fluid_ibo.0, 0, vk::IndexType::UINT32);
             self.device.cmd_draw_indexed(cmd_buf, translucent_fluid_ibo.2, 1, 0, 0, 0);
         }
 
-        self.debug_ui_sub_shader.draw_pipeline(cmd_buf, &self.descriptor);
+        self.debug_ui_sub_shader.draw_pipeline(cmd_buf);
 
         self.device.cmd_end_render_pass(cmd_buf);
     }
@@ -409,7 +488,7 @@ impl Shader for ChunkRasterizer {
         self.debug_ui_sub_shader.destroy();
 
         if let Some((old_buf, old_mem)) = self.terrain_vbo {
-            self.device.destroy_buffer(old_buf, None);
+            self.device.destroy_buffer(old_buf[0], None);
             self.device.free_memory(old_mem, None);
         }
         if let Some((old_buf, old_mem, _)) = self.terrain_ibo {
@@ -418,7 +497,7 @@ impl Shader for ChunkRasterizer {
         }
 
         if let Some((old_buf, old_mem)) = self.transparent_vbo {
-            self.device.destroy_buffer(old_buf, None);
+            self.device.destroy_buffer(old_buf[0], None);
             self.device.free_memory(old_mem, None);
         }
         if let Some((old_buf, old_mem, _)) = self.transparent_ibo {
@@ -427,7 +506,7 @@ impl Shader for ChunkRasterizer {
         }
 
         if let Some((old_buf, old_mem)) = self.translucent_fluid_vbo {
-            self.device.destroy_buffer(old_buf, None);
+            self.device.destroy_buffer(old_buf[0], None);
             self.device.free_memory(old_mem, None);
         }
         if let Some((old_buf, old_mem, _)) = self.translucent_fluid_ibo {

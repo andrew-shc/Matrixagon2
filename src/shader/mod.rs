@@ -7,6 +7,7 @@ use std::{fs, mem, process};
 use std::rc::Rc;
 use ash::{Device, vk};
 use ash::util::read_spv;
+use ash::vk::{AccessFlags, ImageLayout, PipelineStageFlags, SubpassDependencyBuilder};
 use crate::component::{RenderData};
 use crate::framebuffer::FBAttachmentRef;
 
@@ -20,36 +21,158 @@ pub trait Shader {
     unsafe fn destroy(&self);
 }
 
+
+const VBOFS: [vk::DeviceSize; 1] = [0 as vk::DeviceSize];  // vertex buffer offsets
+
 // C:/VulkanSDK/1.3.261.1/bin/glslc.exe src/shader/cube.frag -o src/shader/cube.frag.spv
 // glslc has an option to compile shader to human readable bytecode
 
+// #[non_exhaustive]
+// struct AttachmentKind;
+//
+// impl AttachmentKind {
+//     pub(super) fn presentation(color_format: vk::Format) -> vk::AttachmentDescription {
+//         vk::AttachmentDescription {  // simple presentation attachment
+//             format: color_format,
+//             samples: vk::SampleCountFlags::TYPE_1,  // multi sampling
+//             load_op: vk::AttachmentLoadOp::CLEAR, store_op: vk::AttachmentStoreOp::STORE,
+//             stencil_load_op: vk::AttachmentLoadOp::DONT_CARE, stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,  // ignore
+//             initial_layout: vk::ImageLayout::UNDEFINED,  // dependent on previous renderpass
+//             final_layout: vk::ImageLayout::PRESENT_SRC_KHR,  // dependent on type
+//             ..Default::default()
+//         }
+//     }
+//
+//     pub(super) fn depth(depth_format: vk::Format)  -> vk::AttachmentDescription {
+//         vk::AttachmentDescription {  // simple depth attachment
+//             format: depth_format,
+//             samples: vk::SampleCountFlags::TYPE_1,  // multi sampling
+//             load_op: vk::AttachmentLoadOp::CLEAR, store_op: vk::AttachmentStoreOp::DONT_CARE,
+//             stencil_load_op: vk::AttachmentLoadOp::DONT_CARE, stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,  // ignore
+//             initial_layout: vk::ImageLayout::UNDEFINED,  // dependent on previous renderpass
+//             final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,  // dependent on type
+//             ..Default::default()
+//         }
+//     }
+// }
+//
+// fn transform_attachments(inp: Vec<(u32, ImageLayout)>) -> Vec<vk::AttachmentReference> {
+//     inp.into_iter().map(|(ind, lyt)| vk::AttachmentReference{ attachment: ind, layout: lyt }).collect()
+// }
+//
+// pub(super) fn graphics_subpass(
+//     input_attachments: Vec<(u32, ImageLayout)>,
+//     color_attachments: Vec<(u32, ImageLayout)>,
+//     resolve_attachments: Vec<(u32, ImageLayout)>,
+//     preserve_attachments: Vec<u32>,
+//     depth_attachment: Option<u32>,
+// ) -> vk::SubpassDescriptionBuilder {
+//     let input_attachments = transform_attachments(input_attachments);
+//     let color_attachments = transform_attachments(color_attachments);
+//     let resolve_attachments = transform_attachments(resolve_attachments);
+//
+//     let mut t = vk::SubpassDescription::builder()
+//         .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+//         .input_attachments(&input_attachments)
+//         .color_attachments(&color_attachments)
+//         .resolve_attachments(&resolve_attachments)
+//         .preserve_attachments(&preserve_attachments);
+//     if let Some(depth_ind) = depth_attachment {
+//         let depth_attachment = vk::AttachmentReference{ attachment: depth_ind, layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+//         t = t.depth_stencil_attachment(&depth_attachment);
+//         t
+//     } else {
+//         t
+//     }
+// }
+//
+// type S = PipelineStageFlags;
+// type A = AccessFlags;
+//
+// pub(crate) unsafe fn create_renderpass(
+//     device: Rc<Device>, attachments: Vec<vk::AttachmentDescription>,
+//     subpasses: Vec<vk::SubpassDescription>, dependencies: Vec<vk::SubpassDependencyBuilder>,
+// ) -> vk::RenderPass {
+//     let dependencies = dependencies.into_iter().map(|s| s.build()).collect::<Vec<vk::SubpassDependency>>();
+//
+//     let renderpass_info = vk::RenderPassCreateInfo::builder()
+//         .attachments(&attachments)
+//         .subpasses(&subpasses)
+//         .dependencies(&dependencies)
+//         .build();
+//     device.create_render_pass(&renderpass_info, None)
+//         .unwrap()
+// }
+//
+// #[macro_export]
+// macro_rules! renderpass {  // Simple offset_of macro akin to C++ offsetof
+//     ($base:path; $(($fmt:expr, $field:ident)),*) => {{
+//         let binding_descrp = vk::VertexInputBindingDescription {
+//             binding: 0,
+//             stride: mem::size_of::<$base>() as u32,
+//             input_rate: vk::VertexInputRate::VERTEX,
+//         };
+//         let locations = vec![
+//             $(
+//                 (
+//                     $fmt,
+//                     unsafe {  // offset of
+//                         let b: $base = mem::zeroed();
+//                         std::ptr::addr_of!(b.$field) as isize - std::ptr::addr_of!(b) as isize
+//                     } as u32
+//                 )
+//             ),*
+//         ];
+//         let mut attr_descrps = Vec::new();
+//         for (loc, (format, offset)) in locations.into_iter().enumerate() {
+//             let attr_descrp = vk::VertexInputAttributeDescription {
+//                 binding: 0,
+//                 location: loc as u32,
+//                 format,
+//                 offset,
+//             };
+//             attr_descrps.push(attr_descrp)
+//         }
+//
+//         vk::PipelineVertexInputStateCreateInfo::builder()
+//             .vertex_binding_descriptions(&[binding_descrp])
+//             .vertex_attribute_descriptions(&attr_descrps)
+//             .build()
+//     }};
+// }
 
-pub(crate) fn disabled_cba() -> vk::PipelineColorBlendAttachmentState {
-    vk::PipelineColorBlendAttachmentState {
-        color_write_mask: vk::ColorComponentFlags::R | vk::ColorComponentFlags::G |
-            vk::ColorComponentFlags::B | vk::ColorComponentFlags::A,
-        blend_enable: vk::FALSE,
-        ..Default::default()
+#[non_exhaustive]
+struct ColorBlendKind;
+
+impl ColorBlendKind {
+    pub(crate) fn disabled() -> vk::PipelineColorBlendAttachmentState {
+        vk::PipelineColorBlendAttachmentState {
+            color_write_mask: vk::ColorComponentFlags::R | vk::ColorComponentFlags::G |
+                vk::ColorComponentFlags::B | vk::ColorComponentFlags::A,
+            blend_enable: vk::FALSE,
+            ..Default::default()
+        }
+    }
+
+    pub(crate) fn transparent() -> vk::PipelineColorBlendAttachmentState {
+        vk::PipelineColorBlendAttachmentState {
+            color_write_mask: vk::ColorComponentFlags::R | vk::ColorComponentFlags::G |
+                vk::ColorComponentFlags::B | vk::ColorComponentFlags::A,
+            blend_enable: vk::TRUE,
+            src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
+            dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+            color_blend_op: vk::BlendOp::ADD,
+            src_alpha_blend_factor: vk::BlendFactor::ONE,
+            dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+            alpha_blend_op: vk::BlendOp::ADD,
+            ..Default::default()
+        }
     }
 }
 
-pub(crate) fn transparent_cba() -> vk::PipelineColorBlendAttachmentState {
-    vk::PipelineColorBlendAttachmentState {
-        color_write_mask: vk::ColorComponentFlags::R | vk::ColorComponentFlags::G |
-            vk::ColorComponentFlags::B | vk::ColorComponentFlags::A,
-        blend_enable: vk::TRUE,
-        src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
-        dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-        color_blend_op: vk::BlendOp::ADD,
-        src_alpha_blend_factor: vk::BlendFactor::ONE,
-        dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-        alpha_blend_op: vk::BlendOp::ADD,
-        ..Default::default()
-    }
-}
 
-pub(crate) struct StandardGraphicsPipelineInfo {
-    shader_stages: Vec<vk::PipelineShaderStageCreateInfo>,
+pub(crate) struct StandardGraphicsPipelineInfo<'s> {
+    shaders: Vec<(&'s str, vk::ShaderStageFlags)>,
     vertex_input_state: vk::PipelineVertexInputStateCreateInfo,
     back_face_culling: bool,
     depth_testing: bool,
@@ -118,11 +241,15 @@ pub(crate) unsafe fn standard_graphics_pipeline(
         .build();
 
     let mut pipeline_create_infos = vec![];
+    let mut all_shader_modules = vec![];
 
     // keep referenced object alive
     let mut color_blend_infos = vec![];
+    let mut all_shader_stages = vec![];
 
     for info in pipeline_infos {
+        let (shader_stages, mut shader_modules) = gen_shader_modules_info(device.clone(), info.shaders);
+
         let color_blend_info = vk::PipelineColorBlendStateCreateInfo::builder()
             .logic_op_enable(false)
             .attachments(&info.color_blend_attachment_state)
@@ -130,8 +257,8 @@ pub(crate) unsafe fn standard_graphics_pipeline(
             .build();
 
         let pipeline_create_info = vk::GraphicsPipelineCreateInfo {
-            stage_count: info.shader_stages.len() as u32,
-            p_stages: info.shader_stages.as_ptr(),
+            stage_count: shader_stages.len() as u32,
+            p_stages: shader_stages.as_ptr(),
             p_vertex_input_state: &info.vertex_input_state,
             p_input_assembly_state: &input_assembly_info,
             p_viewport_state: &viewport_state_info,
@@ -149,10 +276,16 @@ pub(crate) unsafe fn standard_graphics_pipeline(
 
         pipeline_create_infos.push(pipeline_create_info);
         color_blend_infos.push(color_blend_info);
+        all_shader_modules.append(&mut shader_modules);
+        all_shader_stages.push(shader_stages);
     }
 
-    device.create_graphics_pipelines(vk::PipelineCache::null(), &pipeline_create_infos, None)
-        .unwrap()
+    let gp = device.create_graphics_pipelines(vk::PipelineCache::null(), &pipeline_create_infos, None)
+        .unwrap();
+
+    destroy_shader_modules(device.clone(), all_shader_modules);
+
+    gp
 }
 
 
@@ -271,68 +404,78 @@ impl DescriptorManager {
     }
 }
 
-#[macro_export]
-macro_rules! get_vertex_inp {  // Simple offset_of macro akin to C++ offsetof
-    ($base:path; $(($fmt:expr, $field:ident)),*) => {{
-        let binding_descrp = vk::VertexInputBindingDescription {
-            binding: 0,
-            stride: mem::size_of::<$base>() as u32,
-            input_rate: vk::VertexInputRate::VERTEX,
-        };
-        let locations = vec![
-            $(
-                (
-                    $fmt,
-                    unsafe {  // offset of
-                        let b: $base = mem::zeroed();
-                        std::ptr::addr_of!(b.$field) as isize - std::ptr::addr_of!(b) as isize
-                    } as u32
-                )
-            ),*
-        ];
-        let mut attr_descrps = Vec::new();
-        for (loc, (format, offset)) in locations.into_iter().enumerate() {
-            let attr_descrp = vk::VertexInputAttributeDescription {
-                binding: 0,
-                location: loc as u32,
-                format,
-                offset,
-            };
-            attr_descrps.push(attr_descrp)
-        }
-
-        vk::PipelineVertexInputStateCreateInfo::builder()
-            .vertex_binding_descriptions(&[binding_descrp])
-            .vertex_attribute_descriptions(&attr_descrps)
-            .build()
-    }};
+pub trait Vertex<const A: usize> {
+    const BINDING_DESCRIPTION: vk::VertexInputBindingDescription;
+    const ATTRIBUTE_DESCRIPTION: [vk::VertexInputAttributeDescription; A];
+    const VERTEX_INPUT_STATE: vk::PipelineVertexInputStateCreateInfo;
 }
 
+#[macro_export]
+macro_rules! count {
+    () => (0usize);
+    ( $x:tt $($xs:tt)* ) => (1usize + crate::count!($($xs)*));
+}
 
-pub(crate) fn get_vertex_inp<T>(locations: Vec<(vk::Format, u32)>) -> vk::PipelineVertexInputStateCreateInfo {
-    // assumes a single binding at 0
+#[macro_export]
+macro_rules! vertex_input {  // Simple offset_of macro akin to C++ offsetof
+    ($base:path; $(($fmt:expr, $field:ident)),*) => {
+        use crate::shader::Vertex;
 
-    let binding_descrp = vk::VertexInputBindingDescription {
-        binding: 0,
-        stride: mem::size_of::<T>() as u32,
-        input_rate: vk::VertexInputRate::VERTEX,
+        impl Vertex<{crate::count!($($fmt)*)}> for $base {
+            const BINDING_DESCRIPTION: vk::VertexInputBindingDescription = vk::VertexInputBindingDescription {
+                binding: 0,
+                stride: mem::size_of::<$base>() as u32,
+                input_rate: vk::VertexInputRate::VERTEX,
+            };
+
+            const ATTRIBUTE_DESCRIPTION: [vk::VertexInputAttributeDescription; crate::count!($($fmt)*)] = unsafe {
+                let b = std::mem::MaybeUninit::uninit();
+                let b_ptr: *const $base = b.as_ptr();
+
+                // cast to u8 pointers so we get offset in bytes
+                let b_u8_ptr = b_ptr as *const u8;
+
+                let mut locations = [
+                    $(
+                        vk::VertexInputAttributeDescription {
+                            binding: 0u32,
+                            location: 0u32,
+                            format: $fmt,
+                            offset: {
+                                let f_u8_ptr = std::ptr::addr_of!((*b_ptr).$field) as *const u8;
+                                f_u8_ptr.offset_from(b_u8_ptr) as u32
+                            },
+                        }
+                    ),*
+                ];
+
+                let count = crate::count!($($fmt)*);
+                let mut i = 0usize;
+                while i < count {
+                    locations[i].location = i as u32;
+                    i += 1;
+                }
+
+                locations
+            };
+
+            const VERTEX_INPUT_STATE: vk::PipelineVertexInputStateCreateInfo = vk::PipelineVertexInputStateCreateInfo {
+                s_type: vk::StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                p_next: std::ptr::null(),
+                flags: vk::PipelineVertexInputStateCreateFlags::empty(),
+                vertex_binding_description_count: 1,
+                p_vertex_binding_descriptions: &Self::BINDING_DESCRIPTION as *const vk::VertexInputBindingDescription,
+                vertex_attribute_description_count: crate::count!($($fmt)*) as u32,
+                p_vertex_attribute_descriptions: &Self::ATTRIBUTE_DESCRIPTION as *const vk::VertexInputAttributeDescription,
+            };
+        }
+
+
+        // vk::PipelineVertexInputStateCreateInfo::builder()
+        //     .vertex_binding_descriptions(&[binding_descrp])
+        //     .vertex_attribute_descriptions(&attr_descrps)
+        //     .build()
     };
-
-    let mut attr_descrps = Vec::new();
-    for (loc, (format, offset)) in locations.into_iter().enumerate() {
-        let attr_descrp = vk::VertexInputAttributeDescription {
-            binding: 0,
-            location: loc as u32,
-            format,
-            offset,
-        };
-        attr_descrps.push(attr_descrp)
-    }
-
-    vk::PipelineVertexInputStateCreateInfo::builder()
-        .vertex_binding_descriptions(&[binding_descrp])
-        .vertex_attribute_descriptions(&attr_descrps)
-        .build()
 }
 
 pub(crate) unsafe fn gen_shader_modules_info(device: Rc<Device>, shaders: Vec<(&str, vk::ShaderStageFlags)>)
