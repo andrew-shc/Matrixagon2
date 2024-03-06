@@ -127,7 +127,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
     }
 
     pub fn update(&mut self, mode: UpdateChunk) -> bool {
-        let mut pos_changed = false;
+        let mut outer_chunk_update = false;
         let mut inner_chunk_update = false;
         let mut chunk_changed = false;
 
@@ -142,17 +142,17 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
 
             // BORDER RADIUS CHUNK UPDATE
 
-            pos_changed |= Self::check_and_update_axis::<G::A>(&mut self.central_pos.x, &pos.x, self.chunk_outer_update_radius);
-            pos_changed |= Self::check_and_update_axis::<G::A>(&mut self.central_pos.y, &pos.y, self.chunk_outer_update_radius);
-            pos_changed |= Self::check_and_update_axis::<G::A>(&mut self.central_pos.z, &pos.z, self.chunk_outer_update_radius);
+            outer_chunk_update |= Self::check_and_update_axis::<G::A>(&mut self.central_pos.x, &pos.x, self.chunk_outer_update_radius);
+            outer_chunk_update |= Self::check_and_update_axis::<G::A>(&mut self.central_pos.y, &pos.y, self.chunk_outer_update_radius);
+            outer_chunk_update |= Self::check_and_update_axis::<G::A>(&mut self.central_pos.z, &pos.z, self.chunk_outer_update_radius);
         } else {
             inner_chunk_update = true;
-            pos_changed = true;
+            outer_chunk_update = true;
         }
 
-        if pos_changed || inner_chunk_update {  // chunk position changed, update what chunks needs to be loaded
+        if outer_chunk_update || inner_chunk_update {  // chunk position changed, update what chunks needs to be loaded
             // println!("CENTRAL POS {:?}", self.central_pos);
-            if pos_changed {
+            if outer_chunk_update {
                 self.reset_chunk_visibility();
             }
 
@@ -165,19 +165,15 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
                             Length::new::<G::B>(cz as f32)+self.central_pos.z,
                         );
 
-                        if pos_changed {
+                        if outer_chunk_update {
 
                             if let Some(chunk) = self.chunks.get_mut(&Position::from(chunk_pos)) {
                                 if !chunk.visible {
                                     chunk.visible = true;
                                     chunk_changed = true;
                                 }
-                            } else if !inner_chunk_update || (inner_chunk_update && !(
-                                Self::check_inside_radius::<G::B>(&self.inner_central_pos.x, &chunk_pos.x, self.chunk_inner_radius) &&
-                                Self::check_inside_radius::<G::B>(&self.inner_central_pos.y, &chunk_pos.y, self.chunk_inner_radius) &&
-                                Self::check_inside_radius::<G::B>(&self.inner_central_pos.z, &chunk_pos.z, self.chunk_inner_radius)
-                            )) {
-                                // chunk at new_chunk_pos does not exist (needs to be created) unless it is within inner chunk
+                            } else {
+                                // chunk at new_chunk_pos does not exist (needs to be created) for all chunks regardless whether its inner
 
                                 if chunk_pos.x.get::<G::A>() % 1.0 == 0.0 &&
                                     chunk_pos.y.get::<G::A>() % 2.0 == 0.0 &&
@@ -198,12 +194,15 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
                         //  hence, it needs to be after it is generated only in this niche case
                         if inner_chunk_update {
                             if let Some(chunk) = self.chunks.get_mut(&Position::from(chunk_pos)) {
-                                if Self::check_inside_radius::<G::B>(&self.inner_central_pos.x, &chunk.pos.x, self.chunk_inner_radius) &&
+                                if
+                                    Self::check_inside_radius::<G::B>(&self.inner_central_pos.x, &chunk.pos.x, self.chunk_inner_radius) &&
                                     Self::check_inside_radius::<G::B>(&self.inner_central_pos.y, &chunk.pos.y, self.chunk_inner_radius) &&
                                     Self::check_inside_radius::<G::B>(&self.inner_central_pos.z, &chunk.pos.z, self.chunk_inner_radius) {
                                     // chunk inside inner radius (needs to be 'removed')
-                                    chunk.visible = false;
-                                    chunk_changed = true;
+                                    if chunk.visible {
+                                        chunk.visible = false;
+                                        chunk_changed = true;
+                                    }
                                     // println!("Set chunk to INVISIBLE [{} {} {} <{}>]",
                                     //          &chunk.pos.x.get::<G::A>(),
                                     //          &chunk.pos.y.get::<G::A>(),
@@ -224,7 +223,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
                 }
             }
 
-            if pos_changed {
+            if outer_chunk_update {
                 println!("CHUNK NEED UPDATE: BORDER {:?}", G::A::abbreviation());
             }
             if inner_chunk_update {
