@@ -18,6 +18,7 @@
 
 #[macro_use]
 extern crate uom;
+extern crate alloc;
 
 use std::path::Path;
 use std::time::Instant;

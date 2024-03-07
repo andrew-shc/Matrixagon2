@@ -12,10 +12,10 @@ fn convert_into_vulkan_type(data_type: String, len: usize) -> ash::vk::Format {
         ("f32", 3) => ash::vk::Format::R32G32B32_SFLOAT,
         ("f32", 2) => ash::vk::Format::R32G32_SFLOAT,
         ("f32", 1) => ash::vk::Format::R32_SFLOAT,
-        ("u8", 4) => ash::vk::Format::R8G8B8A8_UINT,
-        ("u8", 3) => ash::vk::Format::R8G8B8_UINT,
-        ("u8", 2) => ash::vk::Format::R8G8_UINT,
-        ("u8", 1) => ash::vk::Format::R8_UINT,
+        ("u8", 4) => ash::vk::Format::R8G8B8A8_UNORM,
+        ("u8", 3) => ash::vk::Format::R8G8B8_UNORM,
+        ("u8", 2) => ash::vk::Format::R8G8_UNORM,
+        ("u8", 1) => ash::vk::Format::R8_UNORM,
         _ => unimplemented!("Vertex Derive / Type Conversion: Unknown Possible Valid Type {:?} {:?}", data_type, len)
     }
 }
@@ -41,7 +41,7 @@ pub fn derive_vertex(input: TokenStream) -> TokenStream {
                         // println!("Vertex Derive / Array: {:?} {:?}", homogenous_type.to_string(), length.base10_parse::<usize>().unwrap());
                         let vk_type = convert_into_vulkan_type(homogenous_type.to_string(), length.base10_parse::<usize>().unwrap());
                         let vk_format: proc_macro2::TokenStream = format!("ash::vk::Format::{:?}", vk_type).parse().unwrap();
-                        println!("Vertex Derive / Array: {:?}", vk_format);
+                        // println!("Vertex Derive / Array: {:?}", vk_format);
                         let field_name = &f.ident.as_ref().expect("Field names are expected.");
                         quote! {
                             ash::vk::VertexInputAttributeDescription {
@@ -66,7 +66,7 @@ pub fn derive_vertex(input: TokenStream) -> TokenStream {
                     // println!("Vertex Derive / Type: {:?}", scalar_type.to_string());
                     let vk_type = convert_into_vulkan_type(scalar_type.to_string(), 1);
                     let vk_format: proc_macro2::TokenStream = format!("ash::vk::Format::{:?}", vk_type).parse().unwrap();
-                    println!("Vertex Derive / Array: {:?}", vk_format);
+                    // println!("Vertex Derive / Array: {:?}", vk_format);
                     let field_name = &f.ident.as_ref().expect("Field names are expected.");
                     quote! {
                         ash::vk::VertexInputAttributeDescription {
