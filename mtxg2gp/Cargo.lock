@@ -559,11 +559,30 @@ dependencies = [
  "ash",
  "ash-window",
  "egui",
+ "matrixagon_util",
  "noise",
  "png",
  "raw-window-handle",
  "uom",
  "winit",
+]
+
+[[package]]
+name = "matrixagon_derive"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.41",
+]
+
+[[package]]
+name = "matrixagon_util"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "matrixagon_derive",
 ]
 
 [[package]]

@@ -404,79 +404,79 @@ impl DescriptorManager {
     }
 }
 
-pub trait Vertex<const A: usize> {
-    const BINDING_DESCRIPTION: vk::VertexInputBindingDescription;
-    const ATTRIBUTE_DESCRIPTION: [vk::VertexInputAttributeDescription; A];
-    const VERTEX_INPUT_STATE: vk::PipelineVertexInputStateCreateInfo;
-}
-
-#[macro_export]
-macro_rules! count {
-    () => (0usize);
-    ( $x:tt $($xs:tt)* ) => (1usize + crate::count!($($xs)*));
-}
-
-#[macro_export]
-macro_rules! vertex_input {  // Simple offset_of macro akin to C++ offsetof
-    ($base:path; $(($fmt:expr, $field:ident)),*) => {
-        use crate::shader::Vertex;
-
-        impl Vertex<{crate::count!($($fmt)*)}> for $base {
-            const BINDING_DESCRIPTION: vk::VertexInputBindingDescription = vk::VertexInputBindingDescription {
-                binding: 0,
-                stride: mem::size_of::<$base>() as u32,
-                input_rate: vk::VertexInputRate::VERTEX,
-            };
-
-            const ATTRIBUTE_DESCRIPTION: [vk::VertexInputAttributeDescription; crate::count!($($fmt)*)] = unsafe {
-                let b = std::mem::MaybeUninit::uninit();
-                let b_ptr: *const $base = b.as_ptr();
-
-                // cast to u8 pointers so we get offset in bytes
-                let b_u8_ptr = b_ptr as *const u8;
-
-                let mut locations = [
-                    $(
-                        vk::VertexInputAttributeDescription {
-                            binding: 0u32,
-                            location: 0u32,
-                            format: $fmt,
-                            offset: {
-                                let f_u8_ptr = std::ptr::addr_of!((*b_ptr).$field) as *const u8;
-                                f_u8_ptr.offset_from(b_u8_ptr) as u32
-                            },
-                        }
-                    ),*
-                ];
-
-                let count = crate::count!($($fmt)*);
-                let mut i = 0usize;
-                while i < count {
-                    locations[i].location = i as u32;
-                    i += 1;
-                }
-
-                locations
-            };
-
-            const VERTEX_INPUT_STATE: vk::PipelineVertexInputStateCreateInfo = vk::PipelineVertexInputStateCreateInfo {
-                s_type: vk::StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-                p_next: std::ptr::null(),
-                flags: vk::PipelineVertexInputStateCreateFlags::empty(),
-                vertex_binding_description_count: 1,
-                p_vertex_binding_descriptions: &Self::BINDING_DESCRIPTION as *const vk::VertexInputBindingDescription,
-                vertex_attribute_description_count: crate::count!($($fmt)*) as u32,
-                p_vertex_attribute_descriptions: &Self::ATTRIBUTE_DESCRIPTION as *const vk::VertexInputAttributeDescription,
-            };
-        }
-
-
-        // vk::PipelineVertexInputStateCreateInfo::builder()
-        //     .vertex_binding_descriptions(&[binding_descrp])
-        //     .vertex_attribute_descriptions(&attr_descrps)
-        //     .build()
-    };
-}
+// pub trait Vertex<const A: usize> {
+//     const BINDING_DESCRIPTION: vk::VertexInputBindingDescription;
+//     const ATTRIBUTE_DESCRIPTION: [vk::VertexInputAttributeDescription; A];
+//     const VERTEX_INPUT_STATE: vk::PipelineVertexInputStateCreateInfo;
+// }
+//
+// #[macro_export]
+// macro_rules! count {
+//     () => (0usize);
+//     ( $x:tt $($xs:tt)* ) => (1usize + crate::count!($($xs)*));
+// }
+//
+// #[macro_export]
+// macro_rules! vertex_input {  // Simple offset_of macro akin to C++ offsetof
+//     ($base:path; $(($fmt:expr, $field:ident)),*) => {
+//         use crate::shader::Vertex;
+//
+//         impl Vertex<{crate::count!($($fmt)*)}> for $base {
+//             const BINDING_DESCRIPTION: vk::VertexInputBindingDescription = vk::VertexInputBindingDescription {
+//                 binding: 0,
+//                 stride: mem::size_of::<$base>() as u32,
+//                 input_rate: vk::VertexInputRate::VERTEX,
+//             };
+//
+//             const ATTRIBUTE_DESCRIPTION: [vk::VertexInputAttributeDescription; crate::count!($($fmt)*)] = unsafe {
+//                 let b = std::mem::MaybeUninit::uninit();
+//                 let b_ptr: *const $base = b.as_ptr();
+//
+//                 // cast to u8 pointers so we get offset in bytes
+//                 let b_u8_ptr = b_ptr as *const u8;
+//
+//                 let mut locations = [
+//                     $(
+//                         vk::VertexInputAttributeDescription {
+//                             binding: 0u32,
+//                             location: 0u32,
+//                             format: $fmt,
+//                             offset: {
+//                                 let f_u8_ptr = std::ptr::addr_of!((*b_ptr).$field) as *const u8;
+//                                 f_u8_ptr.offset_from(b_u8_ptr) as u32
+//                             },
+//                         }
+//                     ),*
+//                 ];
+//
+//                 let count = crate::count!($($fmt)*)
+//                 let mut i = 0usize;
+//                 while i < count {
+//                     locations[i].location = i as u32;
+//                     i += 1;
+//                 }
+//
+//                 locations
+//             };
+//
+//             const VERTEX_INPUT_STATE: vk::PipelineVertexInputStateCreateInfo = vk::PipelineVertexInputStateCreateInfo {
+//                 s_type: vk::StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+//                 p_next: std::ptr::null(),
+//                 flags: vk::PipelineVertexInputStateCreateFlags::empty(),
+//                 vertex_binding_description_count: 1,
+//                 p_vertex_binding_descriptions: &Self::BINDING_DESCRIPTION as *const vk::VertexInputBindingDescription,
+//                 vertex_attribute_description_count: crate::count!($($fmt)*) as u32,
+//                 p_vertex_attribute_descriptions: &Self::ATTRIBUTE_DESCRIPTION as *const vk::VertexInputAttributeDescription,
+//             };
+//         }
+//
+//
+//         // vk::PipelineVertexInputStateCreateInfo::builder()
+//         //     .vertex_binding_descriptions(&[binding_descrp])
+//         //     .vertex_attribute_descriptions(&attr_descrps)
+//         //     .build()
+//     };
+// }
 
 pub(crate) unsafe fn gen_shader_modules_info(device: Rc<Device>, shaders: Vec<(&str, vk::ShaderStageFlags)>)
     -> (Vec<vk::PipelineShaderStageCreateInfo>, Vec<vk::ShaderModule>) {

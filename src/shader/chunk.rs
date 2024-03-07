@@ -4,21 +4,23 @@ use ash::{Device, vk};
 use ash::vk::{AccessFlags, ImageLayout, PipelineStageFlags, SUBPASS_EXTERNAL};
 use crate::component::{RenderData, RenderDataPurpose};
 use crate::framebuffer::FBAttachmentRef;
-use crate::{vertex_input};
+// use crate::{vertex_input};
 use crate::shader::{ColorBlendKind, DescriptorManager, Shader, standard_graphics_pipeline, StandardGraphicsPipelineInfo, VBOFS};
 use crate::shader::debug_ui::DebugUISubShader;
+use matrixagon_util::{Vertex, VulkanVertexState};
 
-#[derive(Copy, Clone, Debug)]
+
+#[derive(Copy, Clone, Debug, Vertex)]
 pub struct ChunkVertex {
     pub(crate) pos: [f32; 3],
     pub(crate) uv: [f32; 2],
     pub(crate) txtr: f32,
 }
-vertex_input!(ChunkVertex;
-    (vk::Format::R32G32B32_SFLOAT, pos),
-    (vk::Format::R32G32_SFLOAT, uv),
-    (vk::Format::R32_SFLOAT, txtr)
-);
+// vertex_input!(ChunkVertex;
+//     (vk::Format::R32G32B32_SFLOAT, pos),
+//     (vk::Format::R32G32_SFLOAT, uv),
+//     (vk::Format::R32_SFLOAT, txtr)
+// );
 
 
 pub struct ChunkRasterizer {

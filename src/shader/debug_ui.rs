@@ -1,14 +1,18 @@
 use std::mem;
 use std::rc::Rc;
 use ash::{Device, vk};
-use crate::{vertex_input};
+// use crate::{vertex_input};
 use crate::shader::{ColorBlendKind, standard_graphics_pipeline, StandardGraphicsPipelineInfo, VBOFS};
+use matrixagon_util::{Vertex, VulkanVertexState};
 
-vertex_input!(egui::epaint::Vertex;
-    (vk::Format::R32G32_SFLOAT, pos),
-    (vk::Format::R32G32_SFLOAT, uv),
-    (vk::Format::R8G8B8A8_UNORM, color)
-);
+
+// emulating the structure of the EguiVertex
+#[derive(Copy, Clone, Debug, Vertex)]
+pub struct EguiVertex {
+    pub(crate) pos: [f32; 2],
+    pub(crate) uv: [f32; 2],
+    pub(crate) color: [u8; 3],
+}
 
 
 pub struct DebugUISubShader {
@@ -32,7 +36,7 @@ impl DebugUISubShader {
                         ("C:/Users/andrewshen/documents/matrixagon2/src/shader/debug_ui.vert", vk::ShaderStageFlags::VERTEX),
                         ("C:/Users/andrewshen/documents/matrixagon2/src/shader/debug_ui.frag", vk::ShaderStageFlags::FRAGMENT),
                     ],
-                    vertex_input_state: egui::epaint::Vertex::VERTEX_INPUT_STATE,
+                    vertex_input_state: EguiVertex::VERTEX_INPUT_STATE,
                     back_face_culling: false, depth_testing: false,
                     color_blend_attachment_state: vec![ColorBlendKind::transparent()],
                     subpass_index: 1,

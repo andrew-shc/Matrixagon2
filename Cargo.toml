@@ -1,3 +1,5 @@
+workspace = { members = ["mtxg2-derive", "mtxg2-util"] }
+
 [package]
 name = "matrixagon2"
 version = "0.1.0"
@@ -14,6 +16,8 @@ png = { version = "0.17.10", features = [] }
 uom = "0.35.0"
 egui = { version = "0.24.1", features = ["bytemuck"] }
 noise = "0.8.2"
+
+matrixagon_util = { path = "./mtxg2-util" }
 
 [dev-dependencies]
 criterion = "0.5.1"

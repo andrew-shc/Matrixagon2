@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate matrixagon2;
+
 use matrixagon2::debug::DebugVisibility;
 use matrixagon2::MatrixagonApp;
 
