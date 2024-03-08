@@ -1,10 +1,66 @@
+use std::rc::Rc;
+use ash::{Device, vk};
 pub use matrixagon_derive::Vertex;
 
 
+
+pub struct IndexedBuffer {
+    device: Rc<Device>,
+
+    vbo: Option<([vk::Buffer; 1], vk::DeviceMemory)>,
+    ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
+}
+
+impl IndexedBuffer {
+    pub fn new(device: Rc<Device>) -> Self {
+        Self {
+            device, vbo: None, ibo: None
+        }
+    }
+
+    pub unsafe fn obtain_indexed_vbo(&self) -> Option<([vk::Buffer; 1], vk::Buffer, u32)> {
+        if let (Some((vbo, _)), Some((ibo, _, len))) = (self.vbo, self.ibo) {
+            Some((vbo, ibo, len))
+        } else {
+            None
+        }
+    }
+
+    pub unsafe fn recreate_vbo(&mut self, buf: [vk::Buffer; 1], mem: vk::DeviceMemory) {
+        if let Some((old_buf, old_mem)) = self.vbo {
+            self.device.device_wait_idle().unwrap();
+            self.device.destroy_buffer(old_buf[0], None);
+            self.device.free_memory(old_mem, None);
+        }
+        self.vbo = Some((buf, mem));
+    }
+
+    pub unsafe fn recreate_ibo(&mut self, buf: vk::Buffer, mem: vk::DeviceMemory, len: u32) {
+        if let Some((old_buf, old_mem, _)) = self.ibo {
+            self.device.device_wait_idle().unwrap();
+            self.device.destroy_buffer(old_buf, None);
+            self.device.free_memory(old_mem, None);
+        }
+        self.ibo = Some((buf, mem, len));
+    }
+
+    pub unsafe fn destroy(&self) {
+        if let Some((old_buf, old_mem)) = self.vbo {
+            self.device.destroy_buffer(old_buf[0], None);
+            self.device.free_memory(old_mem, None);
+        }
+        if let Some((old_buf, old_mem, _)) = self.ibo {
+            self.device.destroy_buffer(old_buf, None);
+            self.device.free_memory(old_mem, None);
+        }
+    }
+}
+
+
 pub trait VulkanVertexState<const A: usize> {
-    const BINDING_DESCRIPTION: ash::vk::VertexInputBindingDescription;
-    const ATTRIBUTE_DESCRIPTION: [ash::vk::VertexInputAttributeDescription; A];
-    const VERTEX_INPUT_STATE: ash::vk::PipelineVertexInputStateCreateInfo;
+    const BINDING_DESCRIPTION: vk::VertexInputBindingDescription;
+    const ATTRIBUTE_DESCRIPTION: [vk::VertexInputAttributeDescription; A];
+    const VERTEX_INPUT_STATE: vk::PipelineVertexInputStateCreateInfo;
 }
 
 

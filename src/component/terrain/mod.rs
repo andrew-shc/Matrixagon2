@@ -21,7 +21,7 @@ use crate::util::{CmdBufContext, create_host_buffer, create_local_buffer};
 use crate::world::WorldEvent;
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum FaceDir {
     FRONT,
     RIGHT,
@@ -201,15 +201,15 @@ impl Component for Terrain<'static> {
                 chunk_mesh_hf.update(UpdateChunk::Forced);
                 self.chunk_mesh_hf.replace(chunk_mesh_hf);
 
-                // let mut chunk_mesh_mf = ChunkMesh::new(
-                //     Length3D::origin(),
-                //     ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
-                //     ChunkGeneratorMF::new(
-                //         self.block_ind.clone(), txtr_mapper.clone(), self.terrain_gen.clone()
-                //     ),
-                // );
-                // chunk_mesh_mf.update(UpdateChunk::Forced);
-                // self.chunk_mesh_mf.replace(chunk_mesh_mf);
+                let mut chunk_mesh_mf = ChunkMesh::new(
+                    Length3D::origin(),
+                    ChunkRadius(2, 1), Some(ChunkRadius(4, 2)),
+                    ChunkGeneratorMF::new(
+                        self.block_ind.clone(), txtr_mapper.clone(), self.terrain_gen.clone()
+                    ),
+                );
+                chunk_mesh_mf.update(UpdateChunk::Forced);
+                self.chunk_mesh_mf.replace(chunk_mesh_mf);
             }
             WorldEvent::SpectatorMode(enabled) => {
                 self.spectator_mode = enabled;

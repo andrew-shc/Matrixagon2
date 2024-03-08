@@ -6,6 +6,7 @@ use crate::handler::VulkanInstance;
 use crate::util::{CmdBufContext, Mat4, matrix_prod};
 use crate::world::{CardinalDir, WorldEvent};
 use std::{ffi, mem};
+use std::ops::{Add, Sub};
 use uom::si;
 use uom::num_traits::Zero;
 use uom::si::f32::{Angle, Length};
@@ -37,6 +38,31 @@ impl Default for Length3D {
         Length3D {x: Length::new::<blox>(0.0), y: Length::new::<blox>(0.0), z: Length::new::<blox>(0.0)}
     }
 }
+
+impl Add for Length3D {
+    type Output = Length3D;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x+rhs.x,
+            y: self.y+rhs.y,
+            z: self.z+rhs.z,
+        }
+    }
+}
+
+impl Sub for Length3D {
+    type Output = Length3D;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x-rhs.x,
+            y: self.y-rhs.y,
+            z: self.z-rhs.z,
+        }
+    }
+}
+
 
 #[derive(Copy, Clone)]
 pub(crate) struct Rotation {

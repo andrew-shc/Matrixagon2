@@ -285,6 +285,7 @@ impl<G: ChunkGeneratable> ChunkMesh<G> {
 
     // generate the entire aggregated vertices/indices
     pub(crate) fn generate_vertices(&mut self) -> Vec<(Vec<G::V>, Vec<G::I>, RenderDataPurpose)> {
+        // TODO: pass in the chunks relative direction to central pos (for face culling)
         self.generator.aggregate_mesh(self.central_pos, &self.chunks)
     }
 

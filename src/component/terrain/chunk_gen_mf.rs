@@ -91,7 +91,8 @@ impl ChunkGeneratable for ChunkGeneratorMF<'_> {
         let mut translucent_ind_count = 0;
 
         for chunk in chunks.values().filter(|c| c.visible()) {
-            for (vert, raw_ind, _, purpose) in chunk.mesh.iter() {
+            for (vert, raw_ind, face, purpose) in chunk.mesh.iter() {
+                println!("CHUNK: Delta Pos: {:?} Mesh Face: {:?}", central_pos-chunk.pos, face);
                 match purpose {
                     RenderDataPurpose::TerrainOpaque => {
                         let mut ind = raw_ind.clone().iter().map(|i| i+opaque_ind_count).collect();
