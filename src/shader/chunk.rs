@@ -1,13 +1,8 @@
-use alloc::alloc;
-use std::mem;
 use std::rc::Rc;
 use ash::{Device, vk};
-use ash::vk::{AccessFlags, ImageLayout, PipelineStageFlags, SUBPASS_EXTERNAL};
 use crate::component::{RenderData, RenderDataPurpose};
 use crate::framebuffer::FBAttachmentRef;
-// use crate::{vertex_input};
-use crate::shader::{ColorBlendKind, DescriptorManager, Shader, standard_graphics_pipeline, StandardGraphicsPipelineInfo, VBOFS};
-use crate::shader::debug_ui::DebugUISubShader;
+use crate::shader::{ColorBlendKind, DescriptorManager, Shader, create_graphics_pipeline, StandardGraphicsPipelineInfo, VBOFS};
 use matrixagon_util::{Vertex, VulkanVertexState, create_renderpass, IndexedBuffer};
 
 
@@ -18,24 +13,38 @@ pub struct ChunkVertex {
     pub(crate) txtr: f32,
 }
 
+// emulating the structure of the EguiVertex
+#[derive(Copy, Clone, Debug, Vertex)]
+pub struct EguiVertex {
+    pub(crate) pos: [f32; 2],
+    pub(crate) uv: [f32; 2],
+    pub(crate) color: [u8; 3],
+}
+
 
 pub struct ChunkRasterizer {
     device: Rc<Device>,
+
     extent: vk::Extent2D,
+    descriptor: DescriptorManager,
     renderpass: vk::RenderPass,
     clear_values: Vec<vk::ClearValue>,
 
-    gfxs_pipeline: vk::Pipeline,
-    transparent_gfxs_pipeline: vk::Pipeline,
-    translucent_fluid_gfxs_pipeline: vk::Pipeline,
+    terrain_pipeline: vk::Pipeline,
+    transparent_pipeline: vk::Pipeline,
+    translucent_fluid_pipeline: vk::Pipeline,
 
     terrain_ivbo: IndexedBuffer,
     transparent_ivbo: IndexedBuffer,
     translucent_fluid_ivbo: IndexedBuffer,
 
-    descriptor: DescriptorManager,
+    // TODO: EGUI debug pipeline extension for this shader
+    debug_scissors: Option<[vk::Rect2D; 1]>,
+    debug_pipeline: vk::Pipeline,
+    debug_ivbo: IndexedBuffer,
 
-    debug_ui_sub_shader: DebugUISubShader,
+    vbo: Option<([vk::Buffer; 1], vk::DeviceMemory)>,
+    ibo: Option<(vk::Buffer, vk::DeviceMemory, u32)>,
 }
 
 impl ChunkRasterizer {
@@ -46,7 +55,7 @@ impl ChunkRasterizer {
                 (vk::DescriptorType::UNIFORM_BUFFER, vk::ShaderStageFlags::VERTEX),  // proj-view
                 (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT),  // textures
             ],
-            vec![  // set 1 for ui
+            vec![  // set 1 for ui  TODO: EGUI debug descriptor-set extension
                 (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, vk::ShaderStageFlags::FRAGMENT), // egui debug ui texture
                 (vk::DescriptorType::INPUT_ATTACHMENT, vk::ShaderStageFlags::FRAGMENT), // input attachment from previous
             ],
@@ -93,7 +102,7 @@ impl ChunkRasterizer {
                     preserve:,
                     depth: depth~DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                 }
-                composition: {
+                composition: {  // TODO: EGUI debug subpass extension (omittable)
                     input: presentation~GENERAL,
                     color: presentation~GENERAL,
                     resolve:,
@@ -108,7 +117,7 @@ impl ChunkRasterizer {
                     src_access: ,
                     dst_access: COLOR_ATTACHMENT_WRITE | DEPTH_STENCIL_ATTACHMENT_WRITE,
                 }
-                terrain->composition: {
+                terrain->composition: {  // TODO: EGUI debug subpass extension (omittable)
                     src_stage:  COLOR_ATTACHMENT_OUTPUT,
                     dst_stage:  FRAGMENT_SHADER,
                     src_access: COLOR_ATTACHMENT_WRITE,
@@ -117,7 +126,7 @@ impl ChunkRasterizer {
             }
         };
 
-        let graphics_pipelines = standard_graphics_pipeline(
+        let graphics_pipelines = create_graphics_pipeline(
             device.clone(),
             vec![
                 StandardGraphicsPipelineInfo {  // opaque pipeline
@@ -154,25 +163,47 @@ impl ChunkRasterizer {
             descriptor.pipeline_layout, renderpass,
         );
 
-        Self {
-            // transparency_sub_shader: ChunkTransparencyRasterizerSubShader::new(),
-            // TODO: DEBUG UI SENSITIVE
-            debug_ui_sub_shader: DebugUISubShader::new(device.clone(), descriptor.pipeline_layout, renderpass),
+        // multi-pipeline creation does not like different vertex input, so it's in a separate group
+        let debug_graphics_pipeline = create_graphics_pipeline(
+            device.clone(),
+            vec![
+                StandardGraphicsPipelineInfo {  // TODO: EGUI debug pipeline extension
+                    shaders: vec![
+                        ("C:/Users/andrewshen/documents/matrixagon2/src/shader/debug_ui.vert", vk::ShaderStageFlags::VERTEX),
+                        ("C:/Users/andrewshen/documents/matrixagon2/src/shader/debug_ui.frag", vk::ShaderStageFlags::FRAGMENT),
+                    ],
+                    vertex_input_state: EguiVertex::VERTEX_INPUT_STATE,
+                    back_face_culling: false, depth_testing: false,
+                    color_blend_attachment_state: vec![ColorBlendKind::transparent()],
+                    subpass_index: 1,
+                },
+            ],
+            descriptor.pipeline_layout, renderpass,
+        );
 
+        Self {
             device: device.clone(),
             extent,
+            descriptor,
             renderpass,
             clear_values: vec![
                 vk::ClearValue { color: vk::ClearColorValue {float32: [0.2, 0.3, 0.9, 1.0]} },
                 vk::ClearValue { color: vk::ClearColorValue {float32: [0.0, 0.0, 0.0, 0.0]} },
             ],
-            gfxs_pipeline: graphics_pipelines[0],
-            transparent_gfxs_pipeline: graphics_pipelines[1],
-            translucent_fluid_gfxs_pipeline: graphics_pipelines[2],
+
+            terrain_pipeline: graphics_pipelines[0],
+            transparent_pipeline: graphics_pipelines[1],
+            translucent_fluid_pipeline: graphics_pipelines[2],
             terrain_ivbo: IndexedBuffer::new(device.clone()),
             transparent_ivbo: IndexedBuffer::new(device.clone()),
             translucent_fluid_ivbo: IndexedBuffer::new(device.clone()),
-            descriptor,
+
+            // TODO: EGUI debug pipeline extension
+            debug_scissors: None,
+            debug_pipeline: debug_graphics_pipeline[0],
+            debug_ivbo: IndexedBuffer::new(device.clone()),
+
+            vbo: None, ibo: None
         }
     }
 }
@@ -183,7 +214,7 @@ impl Shader for ChunkRasterizer {
     }
 
     fn attachments(&self) -> Vec<FBAttachmentRef> {
-        vec![  // TODO: DEBUG UI SENSITIVE
+        vec![  // TODO: EGUI debug extension
             FBAttachmentRef::Depth,
         ]
     }
@@ -197,8 +228,8 @@ impl Shader for ChunkRasterizer {
                 RenderData::InitialDescriptorImage(img, RenderDataPurpose::BlockTextures) => {
                     self.descriptor.write_image(0, 1, img);
                 },
-                // TODO: DEBUG UI SENSITIVE
                 RenderData::InitialDescriptorImage(img, RenderDataPurpose::DebugUI) => {
+                    // TODO: EGUI debug extension
                     self.descriptor.write_image(1, 0, img);  // egui debug ui textures
                 }
                 RenderData::InitialDescriptorImage(img, RenderDataPurpose::PresentationInpAttachment) => {
@@ -219,40 +250,40 @@ impl Shader for ChunkRasterizer {
     fn recreate_buffer(&mut self, render_data: RenderData) {
         match render_data {
             RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainOpaque) => unsafe {
-                println!("RECREATE [OPAQUE/DEFAULT] VERTEX BUFFER");
+                println!("RECREATE [OPAQUE/DEFAULT] VBO");
                 self.terrain_ivbo.recreate_vbo([buf], mem);
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainOpaque) => unsafe {
-                println!("RECREATE [OPAQUE/DEFAULT] INDEX BUFFER");
+                println!("RECREATE [OPAQUE/DEFAULT] IBO");
                 self.terrain_ivbo.recreate_ibo(buf, mem, len);
             }
             RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainTransparent) => unsafe {
-                println!("RECREATE [TRANSPARENT] VERTEX BUFFER");
+                println!("RECREATE [TRANSPARENT] VBO");
                 self.transparent_ivbo.recreate_vbo([buf], mem);
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainTransparent) => unsafe {
-                println!("RECREATE [TRANSPARENT] INDEX BUFFER");
+                println!("RECREATE [TRANSPARENT] IBO");
                 self.transparent_ivbo.recreate_ibo(buf, mem, len);
             }
             RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::TerrainTranslucent) => unsafe {
-                println!("RECREATE [TRANSLUCENT] VERTEX BUFFER");
+                println!("RECREATE [TRANSLUCENT] VBO");
                 self.translucent_fluid_ivbo.recreate_vbo([buf], mem);
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::TerrainTranslucent) => unsafe {
-                println!("RECREATE [TRANSLUCENT] INDEX BUFFER");
+                println!("RECREATE [TRANSLUCENT] IBO");
                 self.translucent_fluid_ivbo.recreate_ibo(buf, mem, len);
             }
-            // TODO: DEBUG UI SENSITIVE
+            // TODO: EGUI debug data extension
             RenderData::RecreateVertexBuffer(buf, mem, RenderDataPurpose::DebugUI) => unsafe {
                 // println!("RECREATE [DEBUG UI] VERTEX BUFFER");
-                self.debug_ui_sub_shader.ui_ivbo.recreate_vbo([buf], mem);
+                self.debug_ivbo.recreate_vbo([buf], mem);
             }
             RenderData::RecreateIndexBuffer(buf, mem, len, RenderDataPurpose::DebugUI) => unsafe {
                 // println!("RECREATE [DEBUG UI] INDEX BUFFER");
-                self.debug_ui_sub_shader.ui_ivbo.recreate_ibo(buf, mem, len);
+                self.debug_ivbo.recreate_ibo(buf, mem, len);
             }
             RenderData::SetScissorDynamicState(scissor, RenderDataPurpose::DebugUI) => unsafe {
-                self.debug_ui_sub_shader.scissor.replace(scissor);
+                self.debug_scissors.replace([scissor]);
             }
             _ => {},
         }
@@ -268,6 +299,9 @@ impl Shader for ChunkRasterizer {
 
         self.device.cmd_begin_render_pass(cmd_buf, &renderpass_info, vk::SubpassContents::INLINE);
 
+        self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.descriptor.pipeline_layout(),
+                                             0, &self.descriptor.descriptor_sets(&[0, 1, 2]), &[]);
+
         let viewports = [vk::Viewport {
             x: 0.0,
             y: 0.0,
@@ -276,50 +310,65 @@ impl Shader for ChunkRasterizer {
             min_depth: 0.0,
             max_depth: 1.0,
         }];
-        let scissors = [vk::Rect2D { offset: vk::Offset2D {x:0,y:0}, extent: self.extent }];
+        let scissors = [vk::Rect2D { offset: vk::Offset2D { x: 0, y: 0 }, extent: self.extent }];
         self.device.cmd_set_viewport(cmd_buf, 0, &viewports);
         self.device.cmd_set_scissor(cmd_buf, 0, &scissors);
 
-        self.device.cmd_bind_descriptor_sets(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.descriptor.pipeline_layout(),
-                                             0, &self.descriptor.descriptor_sets(&[0, 1, 2]), &[]);
+        {
+            if let Some((terrain_vbo, terrain_ibo, ibo_len)) = self.terrain_ivbo.obtain_indexed_vbo() {
+                // opaque objects
+                self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.terrain_pipeline);
+                self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &terrain_vbo, &VBOFS);
+                self.device.cmd_bind_index_buffer(cmd_buf, terrain_ibo, 0, vk::IndexType::UINT32);
+                self.device.cmd_draw_indexed(cmd_buf, ibo_len, 1, 0, 0, 0);
+            }
+            if let Some((transparent_vbo, transparent_ibo, ibo_len)) = self.transparent_ivbo.obtain_indexed_vbo() {
+                // transparent objects
+                self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.transparent_pipeline);
+                self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &transparent_vbo, &VBOFS);
+                self.device.cmd_bind_index_buffer(cmd_buf, transparent_ibo, 0, vk::IndexType::UINT32);
+                self.device.cmd_draw_indexed(cmd_buf, ibo_len, 1, 0, 0, 0);
+            }
+            if let Some((translucent_fluid_vbo, translucent_fluid_ibo, ibo_len)) = self.translucent_fluid_ivbo.obtain_indexed_vbo() {
+                // translucent objects
+                self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.translucent_fluid_pipeline);
+                self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &translucent_fluid_vbo, &VBOFS);
+                self.device.cmd_bind_index_buffer(cmd_buf, translucent_fluid_ibo, 0, vk::IndexType::UINT32);
+                self.device.cmd_draw_indexed(cmd_buf, ibo_len, 1, 0, 0, 0);
+            }
+        }
 
-        if let Some((terrain_vbo, terrain_ibo, ibo_len)) = self.terrain_ivbo.obtain_indexed_vbo() {
-            // opaque objects
-            self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.gfxs_pipeline);
-            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &terrain_vbo, &VBOFS);
-            self.device.cmd_bind_index_buffer(cmd_buf, terrain_ibo, 0, vk::IndexType::UINT32);
-            self.device.cmd_draw_indexed(cmd_buf, ibo_len, 1, 0, 0, 0);
-        }
-        if let Some((transparent_vbo, transparent_ibo, ibo_len)) = self.transparent_ivbo.obtain_indexed_vbo() {
-            // transparent objects
-            self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.transparent_gfxs_pipeline);
-            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &transparent_vbo, &VBOFS);
-            self.device.cmd_bind_index_buffer(cmd_buf, transparent_ibo, 0, vk::IndexType::UINT32);
-            self.device.cmd_draw_indexed(cmd_buf, ibo_len, 1, 0, 0, 0);
-        }
-        if let Some((translucent_fluid_vbo, translucent_fluid_ibo, ibo_len)) = self.translucent_fluid_ivbo.obtain_indexed_vbo() {
-            // translucent objects
-            self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.translucent_fluid_gfxs_pipeline);
-            self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &translucent_fluid_vbo, &VBOFS);
-            self.device.cmd_bind_index_buffer(cmd_buf, translucent_fluid_ibo, 0, vk::IndexType::UINT32);
-            self.device.cmd_draw_indexed(cmd_buf, ibo_len, 1, 0, 0, 0);
-        }
+        // TODO: EGUI debug draw extension
+        self.device.cmd_next_subpass(cmd_buf, vk::SubpassContents::INLINE);
 
-        self.debug_ui_sub_shader.draw_pipeline(cmd_buf);
+        {
+            if let Some(scissors) = self.debug_scissors {
+                self.device.cmd_set_scissor(cmd_buf, 0, &scissors);
+            }
+
+            if let Some((ui_vbo, ui_ibo, ibo_len)) = self.debug_ivbo.obtain_indexed_vbo() {
+                self.device.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::GRAPHICS, self.debug_pipeline);
+                self.device.cmd_bind_vertex_buffers(cmd_buf, 0, &ui_vbo, &VBOFS);
+                self.device.cmd_bind_index_buffer(cmd_buf, ui_ibo, 0, vk::IndexType::UINT32);
+                self.device.cmd_draw_indexed(cmd_buf, ibo_len, 1, 0, 0, 0);
+            }
+        }
 
         self.device.cmd_end_render_pass(cmd_buf);
     }
 
     unsafe fn destroy(&self) {
-        self.debug_ui_sub_shader.destroy();
+        // TODO: EGUI debug extension
+        self.debug_ivbo.destroy();
+        self.device.destroy_pipeline(self.debug_pipeline, None);
 
         self.terrain_ivbo.destroy();
         self.transparent_ivbo.destroy();
         self.translucent_fluid_ivbo.destroy();
 
-        self.device.destroy_pipeline(self.gfxs_pipeline, None);
-        self.device.destroy_pipeline(self.transparent_gfxs_pipeline, None);
-        self.device.destroy_pipeline(self.translucent_fluid_gfxs_pipeline, None);
+        self.device.destroy_pipeline(self.terrain_pipeline, None);
+        self.device.destroy_pipeline(self.transparent_pipeline, None);
+        self.device.destroy_pipeline(self.translucent_fluid_pipeline, None);
 
         self.descriptor.destroy();
         self.device.destroy_render_pass(self.renderpass, None);

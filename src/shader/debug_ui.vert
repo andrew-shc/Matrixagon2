@@ -9,6 +9,7 @@ layout(location = 1) out vec3 out_color;
 
 void main() {
     gl_Position = vec4(pos.x*.002-1.0, pos.y*.002*1.6-1.0, 0.0, 1.0);
+//    gl_Position = vec4(pos.x, pos.y, 0.0, 1.0);
     tex_coord = uv;
     out_color = color;
 }

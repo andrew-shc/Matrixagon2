@@ -1,5 +1,4 @@
 pub mod chunk;
-mod debug_ui;
 
 use std::ffi::CStr;
 use std::fs::File;
@@ -68,7 +67,7 @@ pub(crate) struct StandardGraphicsPipelineInfo<'s> {
     subpass_index: u32,
 }
 
-pub(crate) unsafe fn standard_graphics_pipeline(
+pub(crate) unsafe fn create_graphics_pipeline(
     device: Rc<Device>,
     pipeline_infos: Vec<StandardGraphicsPipelineInfo>,
     pipeline_layout: vk::PipelineLayout,
