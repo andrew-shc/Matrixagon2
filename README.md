@@ -3,6 +3,12 @@ An experimental open-world voxel renderer using Vulkan with focus on interesting
 
 ![splash image](doc/splash_image.png)
 
+## Origin
+- Originally inspired by a Youtube video remaking Minecraft the game
+- The original Matrixagon is [here](https://github.com/AndrewHC36/Matrixagon)
+  - Was made with a mindset of game
+- After, I got more interested in the computer graphics techniques itself and how it can be used with other domains (e.g., RL, ML, CV, etc.)
+
 ## Status
 Will take a break from implementing this project for now
 
