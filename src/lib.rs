@@ -32,7 +32,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window, WindowBuilder};
 use crate::component::camera::{CameraComponent, Length3D};
 use crate::component::debug_ui::{DebugUI};
-use crate::component::flags::GameFlags;
+use crate::component::flags::WorldFlags;
 use crate::debug::DebugVisibility;
 use crate::handler::VulkanHandler;
 use crate::world::{World, WorldEvent};
@@ -151,7 +151,7 @@ impl MatrixagonApp {
             Box::new(TickSync::new(
                 handler.vi.clone(), handler.device.clone(), 1.5,
             )),
-            Box::new(GameFlags::new()),
+            Box::new(WorldFlags::new()),
             Box::new(TextureHandler::new(handler.vi.clone(), handler.device.clone(), vec![
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/null.png"),
                 Path::new("C:/Users/andrewshen/documents/matrixagon2/src/resource/block_textures/stone.png"),

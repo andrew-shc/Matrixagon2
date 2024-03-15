@@ -2,11 +2,11 @@ use winit::event::VirtualKeyCode;
 use crate::component::{Component, RenderData};
 use crate::world::WorldEvent;
 
-pub(crate) struct GameFlags {
+pub(crate) struct WorldFlags {
     spectator_mode: bool
 }
 
-impl GameFlags {
+impl WorldFlags {
     pub(crate) fn new() -> Self {
         Self {
             spectator_mode: false,
@@ -14,7 +14,7 @@ impl GameFlags {
     }
 }
 
-impl Component for GameFlags {
+impl Component for WorldFlags {
     fn render(&self) -> Vec<RenderData> {
         vec![]
     }
