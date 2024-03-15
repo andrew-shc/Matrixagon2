@@ -91,9 +91,16 @@ Will take a break from implementing this project for now
     - Parameters for the main application (of the required components)
     - Extensible `enum WorldEvent` and `enum RenderDataPurpose`
   - Profiling
+
 ## Potential Future Plans on GPU Rendering
 (They are very open goals on aspects that I'm purely interested in)
 - MTXG2RL (Reinforcement Learning / Model experimentation on reinforcement learning agents)
 - MTXG2GP (Graphics Programming / Formal experimentation on graphical techniques)
   - OIT for translucent meshes
 - MTXG2WS (Weather Simulation / Spatio(temporal?) experimentation on fluid, erosion, etc.)
+
+## Vulkan resources
+- Getting started: https://vulkan-tutorial.com/
+- Learning subpasses (and other essential Vulkan features) through reading code
+  - https://github.com/SaschaWillems/Vulkan/blob/master/examples/subpasses/subpasses.cpp
+- And Vulkan docs itself
