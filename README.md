@@ -18,17 +18,19 @@ Will take a break from implementing this project for now
   - Only for opaque blocks like the dirt, stone, sand
 - Originally, for each chunk, I generated all the block in a voxel flat array, which resulted in O(n^3) space and time complexity
   - And culling the inside blocks that are not exposed by the air, I did that block by block, hence the O(n^3) time complexity
-- What this algorithm improves on is how the mesh are generated on exposde sides
+- What this algorithm improves on is how the mesh are generated on exposed sides
   - Effectively reducing space complexity to O(n^2), while time complexity remains O(n^3) but significantly reduced
   - There are 2D grids for the x, y, and z direction, each cell represented by yz, xz, and zy position respectively
     - Each grid cells are numbers of changes from open (air) to closed (opaque) and vice versa
     - Each time the blocks are iterated in its respective direction, it tests whether the next block results in the current grid cell to change (open to close and vice versa)
   - Time complexity is significant reduced with the **height bounds test (HBT)**
-    - Since the terrain is largely in two parts: above ground & underground, we can use the max/min of the base height map of the chunk and test which y-levels the chunk needs to chunk (or even skip it if it's none) 
+    - Since the terrain is largely in two parts: above ground & underground, we can use the max/min of the base height map of the chunk and test which y-levels the chunk needs to chunk (or even skip it if the chunk is entire below or above the base height) 
     - This assumption can also work on the goal of making more realistic terrain for more diverse "heightmaps"
       - e.g. overhangs, caves, trees (overhanging trees/branches), etc.
 - Since this algorithms *directly* stores the mesh faces into its respective direction, the aggregator in the chunk generator can easily face cull (yet to be implemented)
 - Reference: [`component::terrain::mesh_util::voluminous_opaque_cubes_mesh`](src/component/terrain/mesh_util.rs)
+
+![splash image](doc/buggy_mfl_algo.png)
 - Errors in MFL Algorithm & HBT when first implementing it
   - Stones exposed due to error in HBT
   - Faces not rendering in certain direction due to multiple factors
@@ -36,17 +38,15 @@ Will take a break from implementing this project for now
     - MFL algo not testing one more block ahead, resulting in empty faces on chunk borders
   - Grass blocks are the extreme fidelity chunks, the high-fidelity chunks are absent for testing purposes, and the rest (the stones) are the mid-fidelity chunks
 
-![splash image](doc/buggy_mfl_algo.png)
-
 ### Terrain Chunking
 - Current terrain chunks are processed in discrete levels:
-  - cx: for extreme-fidelity chunks (with the highest details)
-  - hf: for high-fidelity chunks
-  - mf: for mid-fidelity chunks
+  - `cx`: for extreme-fidelity chunks (with the highest details)
+  - `hf`: for high-fidelity chunks
+  - `mf`: for mid-fidelity chunks
   - And other yet to be implemented chunk levels
 - Reasoning is there will be diverse mesh optimization and culling methods that it might as well re-generate the mesh for each closer levels
   - Tried octree, but it seems too complicated to implemented for what I am going for
-- Each chunk levels are generated and aggregated in different piece of code [component::terrain](src/component/terrain)
+- Each chunk levels are generated and aggregated in different piece of code [`component::terrain`](src/component/terrain)
 
 ### Shaders
 ![splash image](doc/feature_depth_alpha.png)
@@ -55,7 +55,7 @@ Will take a break from implementing this project for now
   - On a separate shader program (and thus separate pipeline), the fragment shader tested whether the pixel is transparent (alpha = 0), which will reset the depth buffer to allow other transparent objects to color in
     - Effectively, the transparency now tests for *each* pixel of the texture instead of the whole mesh
   - This made rendering meshes with transparent pixels in their textures intuitive, simple, and direct
-- Made the water move in a single direction
+- Modified the translucent shader to make waves in the water oscillate in a single direction
   - Testing around temporal animation using uniform buffers to change the mesh itself
 - [Renderpass macro rules](mtxg2-util/src/lib.rs)
   - Made instantiating renderpass object intuitive and elegant by supplying attachment references and subpass indices via names
